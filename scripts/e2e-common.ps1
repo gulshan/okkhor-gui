@@ -40,14 +40,64 @@ public class OkkhorE2E {
   // restriction for the duration of the call.
   public static bool Force(IntPtr h) {
     IntPtr foreground = GetForegroundWindow();
-    uint theirs = GetWindowThreadProcessId(foreground, IntPtr.Zero);
+    uint theirs = foreground == IntPtr.Zero ? 0 : GetWindowThreadProcessId(foreground, IntPtr.Zero);
     uint mine = GetCurrentThreadId();
-    AttachThreadInput(mine, theirs, true);
+
+    // There may be no foreground window at all — right after a process the
+    // script launched has exited, for instance — and attaching to our own
+    // thread or to a dead one fails. Attach only when it makes sense, and
+    // still attempt the raise either way.
+    bool attached = theirs != 0 && theirs != mine && AttachThreadInput(mine, theirs, true);
+
+    // Starting another process costs this one its foreground privilege, and
+    // SetForegroundWindow is then refused outright. A synthetic Alt tap counts
+    // as user input and restores it.
+    Key(0xA4 /* VK_LMENU */, false);
+    Key(0xA4, true);
+
     ShowWindow(h, 5);
     BringWindowToTop(h);
     bool ok = SetForegroundWindow(h);
-    AttachThreadInput(mine, theirs, false);
+    if (attached) { AttachThreadInput(mine, theirs, false); }
     return ok;
+  }
+
+  [DllImport("user32.dll")] public static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
+  [DllImport("user32.dll")] public static extern bool CloseDesktop(IntPtr h);
+
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+
+  public static string ForegroundProcess() {
+    IntPtr fg = GetForegroundWindow();
+    if (fg == IntPtr.Zero) { return ""; }
+    uint pid;
+    GetWindowThreadProcessId(fg, out pid);
+    try { return System.Diagnostics.Process.GetProcessById((int)pid).ProcessName; }
+    catch { return ""; }
+  }
+
+  // False when nothing can be typed or focused.
+  //
+  // OpenInputDesktop alone is not enough: a UAC prompt does switch to a secure
+  // desktop and makes it fail, but the modern lock screen (LockApp) runs on the
+  // ordinary desktop, so the call succeeds while input still goes nowhere. The
+  // owner of the foreground window is what actually distinguishes the two.
+  public static bool DesktopAvailable() {
+    IntPtr desktop = OpenInputDesktop(0, false, 0x0001 /* DESKTOP_READOBJECTS */);
+    if (desktop == IntPtr.Zero) { return false; }
+    CloseDesktop(desktop);
+
+    string owner = ForegroundProcess();
+    return owner != "LockApp" && owner != "LogonUI";
+  }
+
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassNameW(IntPtr h, System.Text.StringBuilder s, int max);
+  public static string ForegroundClass() {
+    IntPtr fg = GetForegroundWindow();
+    if (fg == IntPtr.Zero) { return "(none)"; }
+    var sb = new System.Text.StringBuilder(256);
+    GetClassNameW(fg, sb, 256);
+    return sb.ToString();
   }
 }
 '@
@@ -126,7 +176,7 @@ function Tap-Shifted {
 
 function Focus-Window {
     param($Form)
-    for ($attempt = 0; $attempt -lt 8; $attempt++) {
+    for ($attempt = 0; $attempt -lt 20; $attempt++) {
         [OkkhorE2E]::Force($Form.Handle) | Out-Null
         Pump 400
         if ([OkkhorE2E]::GetForegroundWindow() -eq $Form.Handle) { return $true }
@@ -153,6 +203,17 @@ function New-TestWindow {
     $form.Show()
     Pump 200
     return @{ Form = $form; Box = $box }
+}
+
+# These tests drive the real desktop, which a locked session does not have.
+# Exiting 3 distinguishes "could not run" from a genuine failure.
+function Assert-DesktopUnlocked {
+    if (-not [OkkhorE2E]::DesktopAvailable()) {
+        'SKIP: the session is locked, or a secure desktop (UAC, Ctrl+Alt+Del) is up.'
+        'These tests inject keystrokes and take the foreground, so they need an'
+        'unlocked, interactive desktop. Sign in and run them again.'
+        exit 3
+    }
 }
 
 function Resolve-OkkhorExe {

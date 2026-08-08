@@ -9,6 +9,7 @@
 # Takes over the keyboard and the foreground window for roughly half a minute.
 
 . (Join-Path $PSScriptRoot 'e2e-common.ps1')
+Assert-DesktopUnlocked
 
 $AMI     = Text-Of 0x0986, 0x09AE, 0x09BF                                # আমি
 $AM      = Text-Of 0x0986, 0x09AE                                        # আম

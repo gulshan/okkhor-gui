@@ -10,6 +10,7 @@
 #   pwsh -File scripts\e2e-punctuation.ps1
 
 . (Join-Path $PSScriptRoot 'e2e-common.ps1')
+Assert-DesktopUnlocked
 
 $AMI          = Text-Of 0x0986, 0x09AE, 0x09BF                     # আমি
 $AMI_DANDA    = Text-Of 0x0986, 0x09AE, 0x09BF, 0x0964             # আমি।

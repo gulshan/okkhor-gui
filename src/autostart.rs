@@ -1,14 +1,19 @@
-//! Registry-backed settings: the Windows startup entry and the per-application
-//! erase-mode overrides.
+//! Registry-backed settings: the Windows startup entry, the per-application
+//! erase-mode overrides, and the small [`Key`] wrapper that [`crate::setup`]
+//! also uses to register the app in Apps & Features.
+//!
+//! Everything here lives under `HKEY_CURRENT_USER`. The app is per-user by
+//! nature — it hooks one interactive session — so nothing it writes ever needs
+//! administrator rights.
 
 use std::collections::HashMap;
 
 use windows::Win32::Foundation::{ERROR_SUCCESS, MAX_PATH};
 use windows::Win32::System::LibraryLoader::GetModuleFileNameW;
 use windows::Win32::System::Registry::{
-    HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey,
-    RegCreateKeyExW, RegDeleteValueW, RegEnumValueW, RegOpenKeyExW, RegQueryValueExW,
-    RegSetValueExW,
+    HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_DWORD, REG_OPTION_NON_VOLATILE, REG_SZ,
+    RegCloseKey, RegCreateKeyExW, RegDeleteKeyW, RegDeleteTreeW, RegDeleteValueW, RegEnumValueW,
+    RegOpenKeyExW, RegQueryValueExW, RegSetValueExW,
 };
 use windows::core::{PCWSTR, PWSTR, w};
 
@@ -18,7 +23,10 @@ const RUN_KEY: PCWSTR = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
 const RUN_VALUE: PCWSTR = w!("okkhor-gui");
 const ERASE_KEY: PCWSTR = w!("Software\\okkhor-gui\\EraseMode");
 
-fn wide(text: &str) -> Vec<u16> {
+/// Everything the app stores, rooted here so uninstall can remove it in one go.
+pub const SETTINGS_KEY: PCWSTR = w!("Software\\okkhor-gui");
+
+pub fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
@@ -32,10 +40,10 @@ fn from_wide_bytes(bytes: &[u8]) -> String {
     String::from_utf16_lossy(&units)
 }
 
-struct Key(HKEY);
+pub struct Key(HKEY);
 
 impl Key {
-    fn open(path: PCWSTR, write: bool) -> Option<Self> {
+    pub fn open(path: PCWSTR, write: bool) -> Option<Self> {
         let mut handle = HKEY::default();
         let access = if write {
             KEY_READ | KEY_WRITE
@@ -63,7 +71,7 @@ impl Key {
         (status == ERROR_SUCCESS).then_some(Key(handle))
     }
 
-    fn set(&self, name: PCWSTR, value: &str) {
+    pub fn set(&self, name: PCWSTR, value: &str) {
         let data = wide(value);
         let bytes = unsafe {
             std::slice::from_raw_parts(data.as_ptr() as *const u8, std::mem::size_of_val(&data[..]))
@@ -73,7 +81,15 @@ impl Key {
         };
     }
 
-    fn get(&self, name: PCWSTR) -> Option<String> {
+    /// Apps & Features reads `NoModify`, `NoRepair` and `EstimatedSize` as
+    /// DWORDs; written as strings they are ignored.
+    pub fn set_dword(&self, name: PCWSTR, value: u32) {
+        unsafe {
+            let _ = RegSetValueExW(self.0, name, None, REG_DWORD, Some(&value.to_le_bytes()));
+        };
+    }
+
+    pub fn get(&self, name: PCWSTR) -> Option<String> {
         let mut size = 0u32;
         let status = unsafe { RegQueryValueExW(self.0, name, None, None, None, Some(&mut size)) };
         if status != ERROR_SUCCESS {
@@ -102,6 +118,18 @@ impl Drop for Key {
     }
 }
 
+/// Delete a key under HKCU along with everything beneath it.
+///
+/// `RegDeleteTreeW` clears the descendants; the follow-up `RegDeleteKeyW`
+/// removes the now-empty key itself, since the tree call is documented
+/// ambiguously on that point and an extra failing delete costs nothing.
+pub fn delete_key_tree(path: PCWSTR) {
+    unsafe {
+        let _ = RegDeleteTreeW(HKEY_CURRENT_USER, path);
+        let _ = RegDeleteKeyW(HKEY_CURRENT_USER, path);
+    }
+}
+
 /// Path of this executable, quoted so a path containing spaces survives the
 /// shell that launches it at logon.
 pub fn own_exe_path() -> String {
@@ -116,12 +144,24 @@ pub fn is_enabled() -> bool {
         .is_some()
 }
 
+/// Toggle autostart for the currently running executable.
 pub fn set_enabled(enabled: bool) {
+    set_enabled_for(&own_exe_path(), enabled);
+}
+
+/// Toggle autostart for a specific executable.
+///
+/// Install needs this: at that moment the running image is whatever copy the
+/// user launched — typically still sitting in a downloads folder — while the
+/// entry has to point at the copy that was just installed. Writing
+/// `own_exe_path()` there would leave autostart aimed at a file the user is
+/// about to delete.
+pub fn set_enabled_for(exe: &str, enabled: bool) {
     let Some(key) = Key::open(RUN_KEY, true) else {
         return;
     };
     if enabled {
-        key.set(RUN_VALUE, &format!("\"{}\"", own_exe_path()));
+        key.set(RUN_VALUE, &format!("\"{exe}\""));
     } else {
         unsafe {
             let _ = RegDeleteValueW(key.0, RUN_VALUE);

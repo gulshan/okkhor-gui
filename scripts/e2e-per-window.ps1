@@ -8,6 +8,7 @@
 #   pwsh -File scripts\e2e-per-window.ps1
 
 . (Join-Path $PSScriptRoot 'e2e-common.ps1')
+Assert-DesktopUnlocked
 
 $AMI     = Text-Of 0x0986, 0x09AE, 0x09BF                                       # আমি
 $AMI_GAN = Text-Of 0x0986, 0x09AE, 0x09BF, 0x0020, 0x0997, 0x09BE, 0x09A8       # আমি গান

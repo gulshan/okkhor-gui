@@ -23,6 +23,32 @@ converted too:
 
 A trailing backtick escapes any of them: `` .` `` types a literal full stop.
 
+## Installing
+
+The executable is its own installer. Double-click it and it offers to install
+for the current user; choose No to run it from where it sits instead.
+
+```
+okkhor-gui.exe --install      install without asking
+okkhor-gui.exe --uninstall    remove it
+okkhor-gui.exe --portable     run from here, never ask
+--silent                      suppress all dialogs, for scripting
+```
+
+Installing copies the program to `%LOCALAPPDATA%\Programs\okkhor-gui`, adds a
+Start Menu entry, registers in **Settings → Apps → Installed apps**, and turns
+on Start with Windows. There is no administrator prompt at any point: the app
+is per-user by nature, since it hooks one interactive session.
+
+Uninstall from Settings → Apps like any other application, or run
+`--uninstall`. It removes the program, the shortcut, the autostart entry and
+every registry value it ever wrote. One artefact survives: the uninstaller
+cannot delete its own running executable, so it hands that last step to a copy
+in `%TEMP%`, and that copy is left behind. Deleting a file on reboot needs
+administrator rights, which a per-user install never asks for. Only ever one
+accumulates — each install and uninstall sweeps away the helpers left by
+earlier runs.
+
 ## Using it
 
 Run `okkhor-gui.exe`. There is no window — look for the tray icon.
@@ -121,7 +147,12 @@ cargo build --release
 pwsh -File scripts\e2e-typing.ps1
 pwsh -File scripts\e2e-punctuation.ps1
 pwsh -File scripts\e2e-per-window.ps1
+pwsh -File scripts\e2e-install.ps1
 ```
+
+They exit 0 on success, 1 on a failed check, 2 if they refuse to run, and 3 if
+the desktop is locked — injected keystrokes go nowhere on a lock screen, and
+that is a skip rather than a failure.
 
 `e2e-typing.ps1` checks inactive passthrough, live conversion after F11,
 backspace unwinding the preview, space committing a word, Shift selecting the
@@ -129,9 +160,13 @@ other consonant, and F11 toggling back off. `e2e-punctuation.ps1` checks the
 conversions in the table above, including the decimal-point exception and the
 backtick escape. `e2e-per-window.ps1` checks that two windows in the *same
 process* hold independent modes and that a mode survives switching away and
-back.
+back. `e2e-install.ps1` installs from a temporary folder, checks everything a
+Windows application is expected to register, confirms the *installed* copy
+transliterates, then uninstalls through the recorded `UninstallString` — the
+same one Settings invokes — and checks that nothing is left. It refuses to run
+if okkhor-gui is already installed, so it cannot destroy a real installation.
 
-Both print per-check PASS/FAIL and exit non-zero on failure. They take over the
+They print per-check PASS/FAIL and exit non-zero on failure. They take over the
 keyboard and the foreground window for about half a minute each, so do not type
 while they run. Expected Bangla is written as code points inside the scripts so
 results cannot depend on file encoding or console rendering.

@@ -12,6 +12,7 @@ mod autostart;
 mod bengali;
 mod input;
 mod keyboard;
+mod setup;
 mod state;
 mod tray;
 mod winevent;
@@ -44,6 +45,27 @@ const HOTKEY_TOGGLE: i32 = 1;
 const HOTKEY_QUIT: i32 = 2;
 
 fn main() {
+    // Install and uninstall run before the singleton guard: they are
+    // short-lived helper invocations, and they need to be able to run while an
+    // instance of the app is up so they can ask it to quit.
+    let mode = match setup::parse_args() {
+        setup::Mode::Offer => setup::offer(false),
+        other => other,
+    };
+
+    match mode {
+        setup::Mode::Install { silent } => std::process::exit(setup::install(silent)),
+        setup::Mode::Uninstall { silent } => std::process::exit(setup::uninstall(silent)),
+        setup::Mode::FinishUninstall { dir, pid } => {
+            std::process::exit(setup::finish_uninstall(&dir, pid))
+        }
+        setup::Mode::Run | setup::Mode::Offer => {}
+    }
+
+    run_tray_app();
+}
+
+fn run_tray_app() {
     // A second instance would install a second set of hooks and every
     // keystroke would be transliterated twice.
     let _singleton = unsafe { CreateMutexW(None, true, w!("Local\\okkhor-gui-singleton")) };

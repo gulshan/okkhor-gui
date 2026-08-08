@@ -38,6 +38,7 @@ const CMD_TOGGLE: usize = 1;
 const CMD_CLUSTER: usize = 2;
 const CMD_AUTOSTART: usize = 3;
 const CMD_EXIT: usize = 4;
+const CMD_INSTALL: usize = 5;
 
 struct Tray {
     hwnd: HWND,
@@ -49,34 +50,41 @@ thread_local! {
     static TRAY: RefCell<Option<Tray>> = const { RefCell::new(None) };
 }
 
-/// Render one tray icon: a filled square with a single glyph centred on it.
-fn make_icon(background: u32, glyph: PCWSTR, glyph_len: usize) -> HICON {
+/// A square filled with `background` and a single glyph centred on it, as
+/// top-down BGRA pixels.
+///
+/// Kept separate from icon creation so the installer can write the very same
+/// artwork out as a real `.ico` file, rather than carrying a second copy of the
+/// drawing code. See [`crate::setup`].
+pub fn draw_glyph(size: i32, background: u32, glyph: PCWSTR, glyph_len: usize) -> Vec<u8> {
+    let mut pixels = vec![0u8; (size * size * 4) as usize];
+
     unsafe {
         let dc = CreateCompatibleDC(None);
 
         let mut info = BITMAPINFO::default();
         info.bmiHeader.biSize = size_of::<BITMAPINFOHEADER>() as u32;
-        info.bmiHeader.biWidth = ICON_SIZE;
-        info.bmiHeader.biHeight = -ICON_SIZE; // negative: top-down rows
+        info.bmiHeader.biWidth = size;
+        info.bmiHeader.biHeight = -size; // negative: top-down rows
         info.bmiHeader.biPlanes = 1;
         info.bmiHeader.biBitCount = 32;
         info.bmiHeader.biCompression = BI_RGB.0;
 
         let mut bits: *mut core::ffi::c_void = std::ptr::null_mut();
-        let Ok(colour) = CreateDIBSection(Some(dc), &info, DIB_RGB_COLORS, &mut bits, None, 0)
+        let Ok(bitmap) = CreateDIBSection(Some(dc), &info, DIB_RGB_COLORS, &mut bits, None, 0)
         else {
             let _ = DeleteDC(dc);
-            return HICON(std::ptr::null_mut());
+            return pixels;
         };
 
-        let previous_bitmap = SelectObject(dc, HGDIOBJ::from(colour));
+        let previous_bitmap = SelectObject(dc, HGDIOBJ::from(bitmap));
 
         let brush = CreateSolidBrush(COLORREF(background));
         let area = RECT {
             left: 0,
             top: 0,
-            right: ICON_SIZE,
-            bottom: ICON_SIZE,
+            right: size,
+            bottom: size,
         };
         FillRect(dc, &area, brush);
         let _ = DeleteObject(HGDIOBJ::from(brush));
@@ -84,7 +92,7 @@ fn make_icon(background: u32, glyph: PCWSTR, glyph_len: usize) -> HICON {
         // Nirmala UI is the stock Windows font with Bangla coverage. If it is
         // missing GDI substitutes something else rather than failing.
         let font = CreateFontW(
-            -22,
+            -(size * 22 / 32),
             0,
             0,
             0,
@@ -114,9 +122,9 @@ fn make_icon(background: u32, glyph: PCWSTR, glyph_len: usize) -> HICON {
         );
 
         // GDI text and fill leave the alpha channel at zero, which would make
-        // the whole icon transparent. Force every pixel opaque.
-        let pixels =
-            std::slice::from_raw_parts_mut(bits as *mut u8, (ICON_SIZE * ICON_SIZE * 4) as usize);
+        // the whole image transparent. Force every pixel opaque.
+        let drawn = std::slice::from_raw_parts(bits as *const u8, pixels.len());
+        pixels.copy_from_slice(drawn);
         for pixel in pixels.chunks_exact_mut(4) {
             pixel[3] = 0xFF;
         }
@@ -124,13 +132,36 @@ fn make_icon(background: u32, glyph: PCWSTR, glyph_len: usize) -> HICON {
         SelectObject(dc, previous_font);
         SelectObject(dc, previous_bitmap);
         let _ = DeleteObject(HGDIOBJ::from(font));
+        let _ = DeleteObject(HGDIOBJ::from(bitmap));
+        let _ = DeleteDC(dc);
+    }
+
+    pixels
+}
+
+/// Wrap top-down BGRA pixels in an `HICON`.
+fn icon_from_pixels(size: i32, pixels: &[u8]) -> HICON {
+    unsafe {
+        let mut info = BITMAPINFO::default();
+        info.bmiHeader.biSize = size_of::<BITMAPINFOHEADER>() as u32;
+        info.bmiHeader.biWidth = size;
+        info.bmiHeader.biHeight = -size;
+        info.bmiHeader.biPlanes = 1;
+        info.bmiHeader.biBitCount = 32;
+        info.bmiHeader.biCompression = BI_RGB.0;
+
+        let mut bits: *mut core::ffi::c_void = std::ptr::null_mut();
+        let Ok(colour) = CreateDIBSection(None, &info, DIB_RGB_COLORS, &mut bits, None, 0) else {
+            return HICON(std::ptr::null_mut());
+        };
+        std::ptr::copy_nonoverlapping(pixels.as_ptr(), bits as *mut u8, pixels.len());
 
         // A 1bpp all-zero mask: with a real alpha channel the mask is unused,
         // but ICONINFO still requires one.
-        let mask_bits = vec![0u8; (ICON_SIZE * ICON_SIZE / 8) as usize];
+        let mask_bits = vec![0u8; (size * size / 8) as usize];
         let mask: HBITMAP = CreateBitmap(
-            ICON_SIZE,
-            ICON_SIZE,
+            size,
+            size,
             1,
             1,
             Some(mask_bits.as_ptr() as *const core::ffi::c_void),
@@ -147,10 +178,21 @@ fn make_icon(background: u32, glyph: PCWSTR, glyph_len: usize) -> HICON {
 
         let _ = DeleteObject(HGDIOBJ::from(mask));
         let _ = DeleteObject(HGDIOBJ::from(colour));
-        let _ = DeleteDC(dc);
-
         icon
     }
+}
+
+fn make_icon(background: u32, glyph: PCWSTR, glyph_len: usize) -> HICON {
+    icon_from_pixels(
+        ICON_SIZE,
+        &draw_glyph(ICON_SIZE, background, glyph, glyph_len),
+    )
+}
+
+/// The app's identity artwork at an arbitrary size — the active tray icon,
+/// used by the installer for the Start Menu shortcut and Apps & Features.
+pub fn app_icon_pixels(size: i32) -> Vec<u8> {
+    draw_glyph(size, ACTIVE_BACKGROUND, w!("অ"), 1)
 }
 
 fn base_data(hwnd: HWND) -> NOTIFYICONDATAW {
@@ -289,6 +331,14 @@ pub fn show_menu(hwnd: HWND) {
             CMD_AUTOSTART,
             PCWSTR(autostart_text.as_ptr()),
         );
+        // Only meaningful while running from outside the install directory,
+        // i.e. straight out of a downloads folder.
+        let install_text = wide("Install okkhor-gui on this PC…");
+        if !crate::setup::running_from_install_dir() {
+            let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+            let _ = AppendMenuW(menu, MF_STRING, CMD_INSTALL, PCWSTR(install_text.as_ptr()));
+        }
+
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
         let _ = AppendMenuW(menu, MF_STRING, CMD_EXIT, PCWSTR(exit_text.as_ptr()));
 
@@ -331,6 +381,16 @@ pub fn show_menu(hwnd: HWND) {
             });
         }
         CMD_AUTOSTART => crate::autostart::set_enabled(!autostart_on),
+        CMD_INSTALL => {
+            // Run the install in a fresh process and step aside, so it is free
+            // to overwrite the executable this one is running from.
+            let _ = std::process::Command::new(crate::autostart::own_exe_path())
+                .arg("--install")
+                .spawn();
+            unsafe {
+                let _ = PostMessageW(Some(hwnd), WM_APP_QUIT, WPARAM(0), LPARAM(0));
+            }
+        }
         CMD_EXIT => unsafe {
             let _ = PostMessageW(Some(hwnd), WM_APP_QUIT, WPARAM(0), LPARAM(0));
         },
