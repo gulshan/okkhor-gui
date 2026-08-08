@@ -1,0 +1,18 @@
+# Build output
+/target/
+
+# Backups from `cargo fix` / rustfmt
+**/*.rs.bk
+
+# MSVC debug symbols
+*.pdb
+
+# Editors
+/.vscode/
+/.idea/
+*.swp
+*~
+
+# Windows shell cruft
+Thumbs.db
+desktop.ini

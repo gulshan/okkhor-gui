@@ -1,0 +1,28 @@
+[package]
+name = "okkhor-gui"
+version = "0.1.0"
+edition = "2024"
+description = "Background Bangla phonetic input for Windows, powered by the okkhor crate"
+license = "MIT"
+
+[dependencies]
+okkhor = "0.8"
+
+[dependencies.windows]
+version = "0.62"
+features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Accessibility",
+    "Win32_UI_Shell",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_System_Registry",
+]
+
+[profile.release]
+opt-level = 2
+strip = true
