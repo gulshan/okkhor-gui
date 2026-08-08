@@ -96,8 +96,23 @@ test suite, including an end-to-end simulation that drives the real parser
 through the same buffer-and-diff loop the keyboard hook uses and asserts the
 modelled screen matches the parser's output after every keystroke.
 
-The parts that need a live desktop — the hooks, hotkeys and injection — were
-verified by driving a real Win32 edit control: inactive passthrough, live
-conversion after F11, backspace unwinding the preview, space committing the
-word, F11 toggling back off, and two windows in one process holding independent
-modes.
+The parts that need a live desktop — the keyboard hook, the global hotkeys and
+`SendInput` injection — cannot be reached from `cargo test`. Those live in
+`scripts/`, and drive a real Win32 edit control with synthetic keystrokes,
+reading back what the control actually contains:
+
+```bash
+cargo build --release
+pwsh -File scripts\e2e-typing.ps1
+pwsh -File scripts\e2e-per-window.ps1
+```
+
+`e2e-typing.ps1` checks inactive passthrough, live conversion after F11,
+backspace unwinding the preview, space committing a word, and F11 toggling back
+off. `e2e-per-window.ps1` checks that two windows in the *same process* hold
+independent modes and that a mode survives switching away and back.
+
+Both print per-check PASS/FAIL and exit non-zero on failure. They take over the
+keyboard and the foreground window for about half a minute each, so do not type
+while they run. Expected Bangla is written as code points inside the scripts so
+results cannot depend on file encoding or console rendering.

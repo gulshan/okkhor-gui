@@ -1,0 +1,65 @@
+# End-to-end test: the core typing loop.
+#
+# Covers that inactive is the default, that F11 turns on live transliteration,
+# that backspace unwinds the preview, that a space commits the word and the next
+# one still converts, and that F11 turns it back off.
+#
+#   pwsh -File scripts\e2e-typing.ps1
+#
+# Takes over the keyboard and the foreground window for roughly half a minute.
+
+. (Join-Path $PSScriptRoot 'e2e-common.ps1')
+
+$AMI     = Text-Of 0x0986, 0x09AE, 0x09BF                                # আমি
+$AM      = Text-Of 0x0986, 0x09AE                                        # আম
+$AM_GAN  = Text-Of 0x0986, 0x09AE, 0x0020, 0x0997, 0x09BE, 0x09A8        # আম গান
+
+$okkhor = Start-Okkhor
+$window = $null
+
+try {
+    $window = New-TestWindow 'okkhor e2e - typing'
+
+    if (-not (Focus-Window $window.Form)) {
+        'ABORT: could not take the foreground; keystrokes would land elsewhere.'
+        exit 2
+    }
+    $window.Box.Focus() | Out-Null
+    Pump 400
+
+    # Every window starts inactive, so these keys must reach the control as-is.
+    Type-Keys $VK.A, $VK.M, $VK.I
+    Check 'inactive by default' 'ami' $window.Box.Text
+
+    $window.Box.Clear()
+    Pump 300
+
+    # F11 activates this window; the same keys now convert as they are typed.
+    Tap $VK.F11
+    Pump 700
+    Type-Keys $VK.A, $VK.M, $VK.I
+    Check 'F11 activates, ami converts' $AMI $window.Box.Text
+
+    # Backspace pops the buffered romanised character and rewrites the preview.
+    Tap $VK.Back
+    Check 'backspace unwinds preview' $AM $window.Box.Text
+
+    # Space ends the word and passes through; the next word converts on its own.
+    Tap $VK.Space
+    Type-Keys $VK.G, $VK.A, $VK.N
+    Check 'space commits, next word converts' $AM_GAN $window.Box.Text
+
+    # F11 again returns the window to passthrough.
+    Tap $VK.F11
+    Pump 700
+    $window.Box.Clear()
+    Pump 300
+    Type-Keys $VK.A, $VK.M
+    Check 'F11 deactivates' 'am' $window.Box.Text
+}
+finally {
+    if ($window) { $window.Form.Close(); Pump 200 }
+    Stop-Okkhor $okkhor
+}
+
+Complete-Run
