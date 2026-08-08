@@ -374,4 +374,80 @@ mod pipeline {
         // rather than breaking it.
         assert_eq!(parser.convert("123"), "১২৩");
     }
+
+    /// Punctuation okkhor converts. `keyboard::punctuation` has to route every
+    /// one of these into the buffer; if any is treated as a word break instead,
+    /// the conversion is silently lost and the raw ASCII reaches the target.
+    #[test]
+    fn punctuation_conversions() {
+        let parser = Parser::new_phonetic();
+
+        assert_eq!(parser.convert("."), "\u{0964}"); // danda ।
+        assert_eq!(parser.convert(".."), "\u{0964}\u{0964}"); // ।।
+        assert_eq!(parser.convert("..."), "..."); // ellipsis stays literal
+        assert_eq!(parser.convert("ami."), "আমি\u{0964}");
+
+        assert_eq!(parser.convert(":"), "\u{0983}"); // visarga ঃ
+        assert_eq!(parser.convert("^"), "\u{0981}"); // candrabindu ঁ
+        assert_eq!(parser.convert(",,"), "\u{09CD}\u{200C}"); // hasant + ZWNJ
+        assert_eq!(parser.convert("$"), "\u{09F3}"); // taka ৳
+        assert_eq!(parser.convert(","), ",");
+
+        // The backtick escapes each of them back to the plain character, which
+        // only works because the backtick is buffered alongside.
+        assert_eq!(parser.convert(".`"), ".");
+        assert_eq!(parser.convert(":`"), ":");
+        assert_eq!(parser.convert("^`"), "^");
+    }
+
+    /// A dot in front of a digit stays a dot, so decimals survive. Because the
+    /// digit only arrives on a later keystroke, the preview necessarily shows
+    /// the danda first and then corrects itself — exactly what live preview and
+    /// the diff exist to handle.
+    #[test]
+    fn decimal_point_corrects_itself_mid_word() {
+        let parser = Parser::new_phonetic();
+        assert_eq!(parser.convert("3."), "৩\u{0964}");
+        assert_eq!(parser.convert("3.14"), "৩.১৪");
+
+        for mode in [EraseMode::CodePoint, EraseMode::Cluster] {
+            assert_eq!(type_word("3.14", mode), "৩.১৪");
+        }
+    }
+
+    /// Avro is case sensitive, and the distinction carries real consonants —
+    /// not stylistic variants. The hook therefore must not treat Shift as a
+    /// word break, and must fold Shift with Caps Lock correctly.
+    #[test]
+    fn case_selects_different_consonants() {
+        let parser = Parser::new_phonetic();
+        assert_eq!(parser.convert("s"), "স");
+        assert_eq!(parser.convert("S"), "শ");
+        assert_eq!(parser.convert("t"), "ত");
+        assert_eq!(parser.convert("T"), "ট");
+        assert_eq!(parser.convert("d"), "দ");
+        assert_eq!(parser.convert("D"), "ড");
+        assert_eq!(parser.convert("n"), "ন");
+        assert_eq!(parser.convert("N"), "ণ");
+        assert_eq!(parser.convert("r"), "র");
+        // Escaped: this is the precomposed U+09DC, not ড + U+09BC NUKTA. The
+        // two are indistinguishable in a source literal and okkhor emits the
+        // precomposed form, exactly as it does for য়.
+        assert_eq!(parser.convert("R"), "\u{09DC}");
+        assert_eq!(parser.convert("Dhaka"), "ঢাকা");
+    }
+
+    #[test]
+    fn punctuation_survives_the_live_preview() {
+        for keys in ["ami.", "ami..", "bhalo:", "3.14", "100$", "ka,,kha"] {
+            let expected = Parser::new_phonetic().convert(keys);
+            for mode in [EraseMode::CodePoint, EraseMode::Cluster] {
+                assert_eq!(
+                    type_word(keys, mode),
+                    expected,
+                    "typing {keys:?} in {mode:?}"
+                );
+            }
+        }
+    }
 }

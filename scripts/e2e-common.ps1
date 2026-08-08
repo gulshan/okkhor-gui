@@ -16,8 +16,19 @@ using System;
 using System.Runtime.InteropServices;
 public class OkkhorE2E {
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+  [DllImport("user32.dll")] public static extern uint MapVirtualKeyW(uint code, uint mapType);
+
+  // Inject a key with its real scan code. Passing 0 for the scan code looks
+  // like it works for ordinary keys, but Windows will not apply a modifier
+  // injected that way to the keystroke that follows it: Shift silently does
+  // nothing and every capital arrives lowercase.
+  public static void Key(byte vk, bool up) {
+    byte scan = (byte)MapVirtualKeyW(vk, 0 /* MAPVK_VK_TO_VSC */);
+    keybd_event(vk, scan, up ? 2u : 0u, UIntPtr.Zero);
+  }
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vk);
   [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr h);
   [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a, uint b, bool attach);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr pid);
@@ -44,8 +55,15 @@ public class OkkhorE2E {
 
 # Virtual-key codes used by the tests.
 $VK = @{
-    A = 0x41; G = 0x47; I = 0x49; M = 0x4D; N = 0x4E
-    Back = 0x08; Space = 0x20; F11 = 0x7A; F12 = 0x7B
+    A = 0x41; B = 0x42; D = 0x44; G = 0x47; H = 0x48; I = 0x49; K = 0x4B
+    L = 0x4C; M = 0x4D; N = 0x4E; O = 0x4F; S = 0x53; T = 0x54; U = 0x55
+    D0 = 0x30; D1 = 0x31; D3 = 0x33; D4 = 0x34; D6 = 0x36
+    Back = 0x08; Space = 0x20; LShift = 0xA0; F11 = 0x7A; F12 = 0x7B
+    # OEM keys, positioned by a US layout — the same assumption the hook makes.
+    Period = 0xBE     # .
+    Comma  = 0xBC     # ,
+    Semi   = 0xBA     # ; and, shifted, :
+    Grave  = 0xC0     # ` — Avro's "do not combine" marker
 }
 
 $Results = @()
@@ -76,17 +94,34 @@ function Pump {
     }
 }
 
+# Note the parameter names below. PowerShell variable names are case
+# insensitive, so a parameter called `$Vk` and the `$VK` table above are the
+# same variable: inside such a function `$VK.LShift` silently reads a property
+# off an integer and yields $null, which casts to byte 0 and presses nothing.
+# Hence `$KeyCode`.
 function Tap {
-    param([int] $Vk)
-    [OkkhorE2E]::keybd_event([byte]$Vk, 0, 0, [UIntPtr]::Zero)
+    param([int] $KeyCode)
+    [OkkhorE2E]::Key([byte]$KeyCode, $false)
     Pump 60
-    [OkkhorE2E]::keybd_event([byte]$Vk, 0, 2, [UIntPtr]::Zero)
+    [OkkhorE2E]::Key([byte]$KeyCode, $true)
     Pump 260
 }
 
 function Type-Keys {
-    param([int[]] $Vks)
-    foreach ($vk in $Vks) { Tap $vk }
+    param([int[]] $KeyCodes)
+    foreach ($code in $KeyCodes) { Tap $code }
+}
+
+# Hold Shift across a single tap. The hook reads Shift with GetAsyncKeyState,
+# so the modifier has to be genuinely down while the key goes by. Left Shift
+# specifically, with its scan code — see the note on OkkhorE2E.Key.
+function Tap-Shifted {
+    param([int] $KeyCode)
+    [OkkhorE2E]::Key([byte]$VK.LShift, $false)
+    Pump 80
+    Tap $KeyCode
+    [OkkhorE2E]::Key([byte]$VK.LShift, $true)
+    Pump 200
 }
 
 function Focus-Window {

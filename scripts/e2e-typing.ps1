@@ -49,7 +49,32 @@ try {
     Type-Keys $VK.G, $VK.A, $VK.N
     Check 'space commits, next word converts' $AM_GAN $window.Box.Text
 
+    # Avro is case sensitive and the difference is a different consonant, so
+    # Shift must reach the parser rather than ending the word: s is স, S is শ.
+    Tap $VK.Space
+    $window.Box.Clear()
+    Pump 300
+    Tap $VK.S
+    Check 'lowercase s is dontobo sa' (Text-Of 0x09B8) $window.Box.Text
+
+    Tap $VK.Space
+    $window.Box.Clear()
+    Pump 300
+    Tap-Shifted $VK.S
+    Check 'capital S is talobbo sha' (Text-Of 0x09B6) $window.Box.Text
+
+    # Dhaka exercises Shift mid-word: D + h is a single conjunct consonant.
+    Tap $VK.Space
+    $window.Box.Clear()
+    Pump 300
+    Tap-Shifted $VK.D
+    Type-Keys $VK.H, $VK.A, $VK.K, $VK.A
+    Check 'Shift mid-word: Dhaka' (Text-Of 0x09A2, 0x09BE, 0x0995, 0x09BE) $window.Box.Text
+
     # F11 again returns the window to passthrough.
+    Tap $VK.Space
+    $window.Box.Clear()
+    Pump 300
     Tap $VK.F11
     Pump 700
     $window.Box.Clear()

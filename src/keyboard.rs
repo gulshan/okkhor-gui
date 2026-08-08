@@ -9,8 +9,8 @@
 
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, GetKeyState, VK_BACK, VK_CAPITAL, VK_CONTROL, VK_F11, VK_F12, VK_LWIN,
-    VK_MENU, VK_RWIN, VK_SHIFT,
+    GetAsyncKeyState, GetKeyState, VK_BACK, VK_CAPITAL, VK_CONTROL, VK_DECIMAL, VK_F11, VK_F12,
+    VK_LWIN, VK_MENU, VK_OEM_1, VK_OEM_3, VK_OEM_COMMA, VK_OEM_PERIOD, VK_RWIN, VK_SHIFT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetForegroundWindow, KBDLLHOOKSTRUCT, MSLLHOOKSTRUCT, PostMessageW, WM_KEYDOWN,
@@ -43,6 +43,40 @@ fn caps_lock_on() -> bool {
     (unsafe { GetKeyState(VK_CAPITAL.0 as i32) } as u16 & 0x0001) != 0
 }
 
+/// Punctuation that okkhor has conversions for, and therefore has to reach the
+/// parser instead of being passed through as ASCII.
+///
+/// | typed | becomes | |
+/// |-------|---------|-|
+/// | `.`   | `।`     | danda, but stays `.` in front of a digit so `3.14` works |
+/// | `..`  | `।।`    | |
+/// | `:`   | `ঃ`     | visarga |
+/// | `^`   | `ঁ`     | candrabindu |
+/// | `,,`  | `্‌`     | hasant + ZWNJ |
+/// | `$`   | `৳`     | taka sign |
+///
+/// These extend the buffered word rather than ending it. They have to: the
+/// multi-character patterns only fire when both characters sit in the same
+/// buffer, and the danda rule needs to see whether a digit follows. A lone `,`
+/// converts to itself, and is here only so `,,` can be recognised.
+///
+/// Each of these also has a backtick escape in okkhor — `` .` `` types a
+/// literal `.` — which works because the backtick is buffered too.
+fn punctuation(vk: u32, shift: bool) -> Option<char> {
+    let vk = vk as u16;
+    Some(match (vk, shift) {
+        (v, false) if v == VK_OEM_PERIOD.0 => '.',
+        (v, _) if v == VK_DECIMAL.0 => '.',
+        (v, false) if v == VK_OEM_COMMA.0 => ',',
+        (v, true) if v == VK_OEM_1.0 => ':',
+        // Avro's marker for "do not combine these two letters".
+        (v, false) if v == VK_OEM_3.0 => '`',
+        (0x34, true) => '$',
+        (0x36, true) => '^',
+        _ => return None,
+    })
+}
+
 /// Classify a virtual-key code.
 ///
 /// The Latin keys are mapped by hand rather than through `ToUnicodeEx`.
@@ -52,6 +86,10 @@ fn caps_lock_on() -> bool {
 /// romanisation requires in any case.
 fn classify(vk: u32) -> Action {
     let shift = modifier_held(VK_SHIFT);
+
+    if let Some(symbol) = punctuation(vk, shift) {
+        return Action::Word(symbol);
+    }
 
     match vk {
         // Letters. Shift and Caps Lock combine the usual way.
@@ -63,12 +101,11 @@ fn classify(vk: u32) -> Action {
                 Action::Word(lower)
             }
         }
-        // Top-row digits map to Bangla numerals; shifted they are punctuation.
+        // Top-row digits become Bangla numerals. Shifted they are symbols, and
+        // the two okkhor knows about were already taken by `punctuation`.
         0x30..=0x39 if !shift => Action::Word((b'0' + (vk - 0x30) as u8) as char),
         // Numeric keypad, unaffected by Shift.
         0x60..=0x69 => Action::Word((b'0' + (vk - 0x60) as u8) as char),
-        // VK_OEM_3. Avro uses the backtick to stop two letters combining.
-        0xC0 if !shift => Action::Word('`'),
 
         v if v == VK_BACK.0 as u32 => Action::Erase,
 

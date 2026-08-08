@@ -5,8 +5,23 @@ in any application and watch it become Bangla as you type. Transliteration comes
 from the [`okkhor`](https://crates.io/crates/okkhor) crate.
 
 ```
-ami banglay gan gai   ->   আমি বাংলায় গান গাই
+ami banglay gan gai.   ->   আমি বাংলায় গান গাই।
 ```
+
+Case matters, because Avro uses it to pick different consonants — `s` is স but
+`S` is শ, `t` is ত but `T` is ট. Punctuation okkhor has conversions for is
+converted too:
+
+| typed | becomes | |
+|-------|---------|-|
+| `.` | `।` | danda; stays a `.` in front of a digit, so `3.14` is `৩.১৪` |
+| `..` | `।।` | |
+| `:` | `ঃ` | visarga |
+| `^` | `ঁ` | candrabindu |
+| `,,` | `্‌` | hasant + ZWNJ |
+| `$` | `৳` | taka sign |
+
+A trailing backtick escapes any of them: `` .` `` types a literal full stop.
 
 ## Using it
 
@@ -104,13 +119,17 @@ reading back what the control actually contains:
 ```bash
 cargo build --release
 pwsh -File scripts\e2e-typing.ps1
+pwsh -File scripts\e2e-punctuation.ps1
 pwsh -File scripts\e2e-per-window.ps1
 ```
 
 `e2e-typing.ps1` checks inactive passthrough, live conversion after F11,
-backspace unwinding the preview, space committing a word, and F11 toggling back
-off. `e2e-per-window.ps1` checks that two windows in the *same process* hold
-independent modes and that a mode survives switching away and back.
+backspace unwinding the preview, space committing a word, Shift selecting the
+other consonant, and F11 toggling back off. `e2e-punctuation.ps1` checks the
+conversions in the table above, including the decimal-point exception and the
+backtick escape. `e2e-per-window.ps1` checks that two windows in the *same
+process* hold independent modes and that a mode survives switching away and
+back.
 
 Both print per-check PASS/FAIL and exit non-zero on failure. They take over the
 keyboard and the foreground window for about half a minute each, so do not type
