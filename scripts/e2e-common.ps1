@@ -47,13 +47,10 @@ public class OkkhorE2E {
     // script launched has exited, for instance — and attaching to our own
     // thread or to a dead one fails. Attach only when it makes sense, and
     // still attempt the raise either way.
+    // Deliberately no synthetic Alt tap here. It is the usual trick for
+    // regaining foreground privilege, but Alt also activates a window's menu,
+    // and DoEvents then pumps inside that modal menu loop and never returns.
     bool attached = theirs != 0 && theirs != mine && AttachThreadInput(mine, theirs, true);
-
-    // Starting another process costs this one its foreground privilege, and
-    // SetForegroundWindow is then refused outright. A synthetic Alt tap counts
-    // as user input and restores it.
-    Key(0xA4 /* VK_LMENU */, false);
-    Key(0xA4, true);
 
     ShowWindow(h, 5);
     BringWindowToTop(h);
@@ -149,8 +146,32 @@ function Pump {
 # same variable: inside such a function `$VK.LShift` silently reads a property
 # off an integer and yields $null, which casts to byte 0 and presses nothing.
 # Hence `$KeyCode`.
+# Refuse to inject anything unless the window under test still has the
+# foreground.
+#
+# These tests synthesise real keystrokes, which go wherever the focus is. If you
+# switch to another application while they run, every remaining keystroke lands
+# in that application instead — and the suites press Backspace, F11 and F12, so
+# that is not merely a wrong test result but a way to damage whatever you moved
+# on to. Aborting is the only safe response; the run reports itself as skipped
+# rather than failed, because nothing was actually measured.
+$ForegroundLost = 'okkhor-e2e-foreground-lost'
+
+function Assert-Foreground {
+    if (-not $script:GuardHwnd) { return }
+    if ([OkkhorE2E]::GetForegroundWindow() -eq $script:GuardHwnd) { return }
+
+    # One quiet attempt to take it back, in case something transient stole it.
+    [OkkhorE2E]::Force($script:GuardHwnd) | Out-Null
+    Pump 300
+    if ([OkkhorE2E]::GetForegroundWindow() -eq $script:GuardHwnd) { return }
+
+    throw $script:ForegroundLost
+}
+
 function Tap {
     param([int] $KeyCode)
+    Assert-Foreground
     [OkkhorE2E]::Key([byte]$KeyCode, $false)
     Pump 60
     [OkkhorE2E]::Key([byte]$KeyCode, $true)
@@ -167,6 +188,7 @@ function Type-Keys {
 # specifically, with its scan code — see the note on OkkhorE2E.Key.
 function Tap-Shifted {
     param([int] $KeyCode)
+    Assert-Foreground
     [OkkhorE2E]::Key([byte]$VK.LShift, $false)
     Pump 80
     Tap $KeyCode
@@ -179,7 +201,11 @@ function Focus-Window {
     for ($attempt = 0; $attempt -lt 20; $attempt++) {
         [OkkhorE2E]::Force($Form.Handle) | Out-Null
         Pump 400
-        if ([OkkhorE2E]::GetForegroundWindow() -eq $Form.Handle) { return $true }
+        if ([OkkhorE2E]::GetForegroundWindow() -eq $Form.Handle) {
+            # Everything injected from here on is checked against this window.
+            $script:GuardHwnd = $Form.Handle
+            return $true
+        }
     }
     return $false
 }
@@ -225,7 +251,11 @@ function Resolve-OkkhorExe {
 }
 
 function Start-Okkhor {
-    $process = Start-Process -FilePath (Resolve-OkkhorExe) -PassThru
+    # --portable is required, not cosmetic. Launched with no arguments from
+    # outside the install directory the executable acts as its own installer and
+    # puts up a modal "install this?" dialog, so the tray app never starts and
+    # every check silently sees untransliterated ASCII.
+    $process = Start-Process -FilePath (Resolve-OkkhorExe) -ArgumentList '--portable' -PassThru
     # Give the hooks, hotkeys and tray icon time to install.
     Start-Sleep -Seconds 2
     return $process
@@ -255,6 +285,14 @@ function Check {
 # Print the tally and set the exit code so these can be chained or scripted.
 function Complete-Run {
     ''
+    if ($script:Interrupted) {
+        'SKIPPED: the foreground moved to another application mid-run.'
+        'These tests type real keystrokes, so they stop rather than send the rest'
+        'into whatever you switched to. Nothing was measured — run them again and'
+        'leave the desktop alone while they work.'
+        $global:LASTEXITCODE = 3
+        exit 3
+    }
     $failed = @($script:Results | Where-Object { -not $_.Ok })
     if ($failed.Count -eq 0) {
         "ALL PASS ($($script:Results.Count) checks)"

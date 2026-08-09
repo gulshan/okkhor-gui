@@ -18,11 +18,17 @@ pub struct Replacement {
 /// `RichTextBox`, WPF `TextBox`, and Chromium, the last checked end to end by
 /// typing into Edge 148 and reading the field back.
 ///
-/// The prefix is compared by code unit and needs no awareness of grapheme
-/// clusters. Emitting a lone combining mark is fine, because the base it
-/// attaches to is already on screen and is already the right one: rewriting
-/// `আম` to `আমি` sends no backspaces and types `ি`, which lands on the `ম`
-/// that is sitting there.
+/// The prefix is a plain code-unit comparison, and deliberately so. Bangla
+/// invites the assumption that this has to be segmentation-aware, but it does
+/// not: a lone combining mark can be emitted safely, because the base it
+/// attaches to is already on screen and already correct. Rewriting `আম` to
+/// `আমি` sends no backspaces and types `ি`, which lands on the `ম` sitting
+/// there. Adding segmentation here would only make every rewrite larger.
+///
+/// If a target ever seems to erase more than this, measure it by typing into
+/// the real application. In a browser, `Selection.modify('extend','backward',
+/// 'character')` looks like the way to check and is not — it walks visible
+/// characters and gave the opposite answer for Chromium.
 pub fn diff(old: &str, new: &str) -> Replacement {
     let mut at = old
         .as_bytes()

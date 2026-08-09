@@ -46,6 +46,11 @@ try {
     Type-Keys $VK.Space, $VK.G, $VK.A, $VK.N
     Check 'A keeps its mode across the switch' $AMI_GAN $a.Box.Text
 }
+catch {
+    # Foreground lost mid-run. Stop rather than type the rest into whatever took
+    # over; Complete-Run reports this as skipped, since nothing was measured.
+    if ("$_" -match $ForegroundLost) { $script:Interrupted = $true } else { throw }
+}
 finally {
     if ($a) { $a.Form.Close() }
     if ($b) { $b.Form.Close() }

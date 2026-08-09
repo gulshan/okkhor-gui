@@ -8,8 +8,8 @@
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CHILDID_SELF, EVENT_OBJECT_DESTROY, EVENT_OBJECT_FOCUS, EVENT_SYSTEM_FOREGROUND, OBJID_WINDOW,
-    WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
+    CHILDID_SELF, EVENT_OBJECT_DESTROY, EVENT_OBJECT_FOCUS, EVENT_SYSTEM_FOREGROUND, GA_ROOT,
+    GetAncestor, OBJID_WINDOW, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
 };
 
 use crate::state::{self, key_of};
@@ -67,7 +67,23 @@ unsafe extern "system" fn win_event_proc(
             tray::refresh();
         }
         EVENT_OBJECT_FOCUS => {
-            state::with_app(|app| app.session.clear());
+            // Only a focus move inside the window being typed into means the
+            // caret has gone somewhere unexpected.
+            //
+            // These events are noisy and global: applications announce their
+            // internal focus changes with NotifyWinEvent, and every one of them
+            // reaches this hook regardless of which process it came from.
+            // Clearing on all of them abandoned the buffered word at random
+            // while the user was still typing it, which corrupts any spelling
+            // whose meaning depends on earlier letters — `kx` came out as
+            // কএক্স instead of ক্ষ, because the k was committed alone and the x
+            // then re-analysed as a fresh word.
+            let root = unsafe { GetAncestor(hwnd, GA_ROOT) };
+            state::with_app(|app| {
+                if !app.target.is_invalid() && (root == app.target || hwnd == app.target) {
+                    app.session.clear();
+                }
+            });
         }
         EVENT_OBJECT_DESTROY if id_object == OBJID_WINDOW.0 && id_child == CHILDID_SELF as i32 => {
             state::with_app(|app| {

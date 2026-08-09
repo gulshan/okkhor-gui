@@ -18,10 +18,12 @@ use windows::core::{PCWSTR, w};
 const RUN_KEY: PCWSTR = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
 const RUN_VALUE: PCWSTR = w!("okkhor-gui");
 
-/// Anything the app stores lands under here, so uninstall can remove it in one
-/// go. Nothing is written here at present; earlier versions kept per-executable
-/// backspace settings, and uninstall still clears the key so those are not left
-/// behind on machines that have them.
+/// Where any per-user setting would live, so uninstall can clear the lot with
+/// one call.
+///
+/// Nothing writes here today. It is kept because older builds did, and
+/// uninstall has to leave those machines clean — not because the key is
+/// unused should it be removed.
 pub const SETTINGS_KEY: PCWSTR = w!("Software\\okkhor-gui");
 
 pub fn wide(text: &str) -> Vec<u16> {

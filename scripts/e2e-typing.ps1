@@ -83,6 +83,11 @@ try {
     Type-Keys $VK.A, $VK.M
     Check 'F11 deactivates' 'am' $window.Box.Text
 }
+catch {
+    # Foreground lost mid-run. Stop rather than type the rest into whatever took
+    # over; Complete-Run reports this as skipped, since nothing was measured.
+    if ("$_" -match $ForegroundLost) { $script:Interrupted = $true } else { throw }
+}
 finally {
     if ($window) { $window.Form.Close(); Pump 200 }
     Stop-Okkhor $okkhor

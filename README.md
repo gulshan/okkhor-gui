@@ -86,12 +86,9 @@ erases **one code point** in every application measured: Win32 edit controls,
 WinForms `TextBox` and `RichTextBox`, WPF `TextBox`, and Chromium — the last
 checked end to end by typing into Edge 148 and reading the field back.
 
-Grapheme clusters do not come into it. A cluster is one *visible* character, so
-`ক্ষ` is three code points but one glyph; earlier versions could count in those
-units instead, behind a per-application setting. Nothing was ever found that
-needed it, and getting it wrong was destructive — too many backspaces eat the
-text in front of the word — so the setting is gone and the count is always code
-points.
+There is nothing to configure. If some application ever turns out to erase more
+than a code point per press, conjuncts will leave debris there and the fix
+belongs in the diff, not in a setting.
 
 ## Limitations
 
@@ -146,6 +143,7 @@ cargo build --release
 pwsh -File scripts\e2e-typing.ps1
 pwsh -File scripts\e2e-punctuation.ps1
 pwsh -File scripts\e2e-per-window.ps1
+pwsh -File scripts\e2e-focus-noise.ps1
 pwsh -File scripts\e2e-install.ps1
 ```
 
@@ -159,7 +157,10 @@ other consonant, and F11 toggling back off. `e2e-punctuation.ps1` checks the
 conversions in the table above, including the decimal-point exception and the
 backtick escape. `e2e-per-window.ps1` checks that two windows in the *same
 process* hold independent modes and that a mode survives switching away and
-back. `e2e-install.ps1` installs from a temporary folder, checks everything a
+back. `e2e-focus-noise.ps1` fires focus events from an unrelated background
+window mid-word and checks the buffered word survives — `kx` is the probe,
+since it only becomes ক্ষ when the x is read together with the k.
+`e2e-install.ps1` installs from a temporary folder, checks everything a
 Windows application is expected to register, confirms the *installed* copy
 transliterates, then uninstalls through the recorded `UninstallString` — the
 same one Settings invokes — and checks that nothing is left. It refuses to run
