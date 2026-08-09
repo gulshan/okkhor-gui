@@ -21,8 +21,7 @@ use windows::Win32::System::Threading::{
 use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, GetWindowThreadProcessId, IsWindow};
 use windows::core::PWSTR;
 
-use crate::bengali::EraseMode;
-use crate::{autostart, input};
+use crate::input;
 
 /// The romanised text typed so far and the Bangla currently showing for it.
 #[derive(Default)]
@@ -52,10 +51,6 @@ pub struct App {
     pub target: HWND,
     /// Full image path of `target`'s process, resolved off the hot path.
     pub target_exe: String,
-    /// Erase mode for `target_exe`, resolved off the hot path.
-    pub target_erase: EraseMode,
-    /// Erase mode overrides, keyed by full executable path.
-    pub erase_overrides: HashMap<String, EraseMode>,
     /// Our own message-only window, used by callbacks that need to defer work
     /// back to the message loop.
     pub msg_hwnd: HWND,
@@ -75,8 +70,6 @@ impl App {
             session: Session::default(),
             target: HWND(std::ptr::null_mut()),
             target_exe: String::new(),
-            target_erase: EraseMode::default(),
-            erase_overrides: autostart::load_erase_overrides(),
             msg_hwnd: HWND(std::ptr::null_mut()),
             hotkeys_via_hook: false,
             swallowed: [false; 256],
@@ -110,26 +103,12 @@ impl App {
     pub fn retarget(&mut self, hwnd: HWND) {
         self.target = hwnd;
         self.target_exe = exe_path_of(hwnd);
-        self.target_erase = self
-            .erase_overrides
-            .get(&self.target_exe)
-            .copied()
-            .unwrap_or_default();
-    }
-
-    pub fn set_erase_mode(&mut self, mode: EraseMode) {
-        if self.target_exe.is_empty() {
-            return;
-        }
-        self.target_erase = mode;
-        self.erase_overrides.insert(self.target_exe.clone(), mode);
-        autostart::save_erase_override(&self.target_exe, mode);
     }
 
     /// Re-convert the buffer and patch the difference onto the screen.
     pub fn render(&mut self) {
         let next = self.parser.convert(&self.session.raw);
-        let replacement = crate::bengali::diff(&self.session.emitted, &next, self.target_erase);
+        let replacement = crate::bengali::diff(&self.session.emitted, &next);
         input::send_replacement(replacement.backspaces, &replacement.text);
         self.session.emitted = next;
     }

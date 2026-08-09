@@ -24,7 +24,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{PCWSTR, w};
 
-use crate::bengali::EraseMode;
 use crate::state;
 use crate::{WM_APP_QUIT, WM_APP_TRAY};
 
@@ -35,7 +34,6 @@ const ACTIVE_BACKGROUND: u32 = 0x00_3E_8E_1E; // 0x00BBGGRR — green
 const IDLE_BACKGROUND: u32 = 0x00_68_63_5F; // grey
 
 const CMD_TOGGLE: usize = 1;
-const CMD_CLUSTER: usize = 2;
 const CMD_AUTOSTART: usize = 3;
 const CMD_EXIT: usize = 4;
 const CMD_INSTALL: usize = 5;
@@ -284,13 +282,9 @@ fn wide(text: &str) -> Vec<u16> {
 /// loop, so anything dispatched from inside it would re-enter the callbacks
 /// while state is borrowed.
 pub fn show_menu(hwnd: HWND) {
-    let Some((active, cluster, autostart_on)) = state::with_app(|app| {
-        (
-            app.is_active(app.target),
-            app.target_erase == EraseMode::Cluster,
-            crate::autostart::is_enabled(),
-        )
-    }) else {
+    let Some((active, autostart_on)) =
+        state::with_app(|app| (app.is_active(app.target), crate::autostart::is_enabled()))
+    else {
         return;
     };
 
@@ -308,7 +302,6 @@ pub fn show_menu(hwnd: HWND) {
         };
 
         let toggle_text = wide("Active for this window\tF11");
-        let cluster_text = wide("Backspace deletes clusters");
         let autostart_text = wide("Start with Windows");
         let exit_text = wide("Exit\tF12");
 
@@ -319,12 +312,6 @@ pub fn show_menu(hwnd: HWND) {
             PCWSTR(toggle_text.as_ptr()),
         );
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-        let _ = AppendMenuW(
-            menu,
-            checked(cluster),
-            CMD_CLUSTER,
-            PCWSTR(cluster_text.as_ptr()),
-        );
         let _ = AppendMenuW(
             menu,
             checked(autostart_on),
@@ -369,16 +356,6 @@ pub fn show_menu(hwnd: HWND) {
                 app.toggle(target);
             });
             refresh();
-        }
-        CMD_CLUSTER => {
-            state::with_app(|app| {
-                let next = if app.target_erase == EraseMode::Cluster {
-                    EraseMode::CodePoint
-                } else {
-                    EraseMode::Cluster
-                };
-                app.set_erase_mode(next);
-            });
         }
         CMD_AUTOSTART => crate::autostart::set_enabled(!autostart_on),
         CMD_INSTALL => {

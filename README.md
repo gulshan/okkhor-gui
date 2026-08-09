@@ -63,9 +63,8 @@ per application: two Notepad windows can be in different modes at the same time.
 The tray icon shows the focused window's mode — green `অ` for active, grey `A`
 for inactive — and its tooltip names the application.
 
-Right-clicking the tray icon offers the mode toggle, the backspace setting
-described below, a **Start with Windows** switch, and Exit. Autostart is never
-enabled behind your back; it writes
+Right-clicking the tray icon offers the mode toggle, a **Start with Windows**
+switch, and Exit. Autostart is never enabled behind your back; it writes
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` only when you tick it.
 
 ## How it types
@@ -81,18 +80,18 @@ so a mistake can never cascade past the word you are typing.
 
 ### Backspacing over Bangla
 
-This is the one genuinely fragile part, and it is why there is a setting for it.
-
 Rewriting the preview means backspacing over Bangla that is already on screen,
-and applications disagree about what one backspace deletes. Notepad, VS Code and
-ordinary Win32 edit controls delete one code point. Word and Chromium-based
-editors delete a whole grapheme cluster, so the three code points of `ক্ষ`
-disappear in a single press.
+so the count has to match what one `VK_BACK` removes in the target. One backspace
+erases **one code point** in every application measured: Win32 edit controls,
+WinForms `TextBox` and `RichTextBox`, WPF `TextBox`, and Chromium — the last
+checked end to end by typing into Edge 148 and reading the field back.
 
-The default assumes one code point per backspace. If conjuncts come out mangled
-in a particular application, tick **Backspace deletes clusters** in the tray menu
-while that application is focused. The choice is remembered per executable in
-`HKCU\Software\okkhor-gui\EraseMode`.
+Grapheme clusters do not come into it. A cluster is one *visible* character, so
+`ক্ষ` is three code points but one glyph; earlier versions could count in those
+units instead, behind a per-application setting. Nothing was ever found that
+needed it, and getting it wrong was destructive — too many backspaces eat the
+text in front of the word — so the setting is gone and the count is always code
+points.
 
 ## Limitations
 
@@ -132,7 +131,7 @@ The only dependencies are `okkhor` and `windows`.
 cargo test
 ```
 
-The cluster segmentation and the on-screen diff are pure logic and carry the
+The on-screen diff and the conversions are pure logic and carry the
 test suite, including an end-to-end simulation that drives the real parser
 through the same buffer-and-diff loop the keyboard hook uses and asserts the
 modelled screen matches the parser's output after every keystroke.

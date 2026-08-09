@@ -1,29 +1,27 @@
-//! Registry-backed settings: the Windows startup entry, the per-application
-//! erase-mode overrides, and the small [`Key`] wrapper that [`crate::setup`]
-//! also uses to register the app in Apps & Features.
+//! Registry-backed settings: the Windows startup entry, and the small [`Key`]
+//! wrapper that [`crate::setup`] also uses to register the app in Apps &
+//! Features.
 //!
 //! Everything here lives under `HKEY_CURRENT_USER`. The app is per-user by
 //! nature — it hooks one interactive session — so nothing it writes ever needs
 //! administrator rights.
 
-use std::collections::HashMap;
-
 use windows::Win32::Foundation::{ERROR_SUCCESS, MAX_PATH};
 use windows::Win32::System::LibraryLoader::GetModuleFileNameW;
 use windows::Win32::System::Registry::{
     HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_DWORD, REG_OPTION_NON_VOLATILE, REG_SZ,
-    RegCloseKey, RegCreateKeyExW, RegDeleteKeyW, RegDeleteTreeW, RegDeleteValueW, RegEnumValueW,
-    RegOpenKeyExW, RegQueryValueExW, RegSetValueExW,
+    RegCloseKey, RegCreateKeyExW, RegDeleteKeyW, RegDeleteTreeW, RegDeleteValueW, RegOpenKeyExW,
+    RegQueryValueExW, RegSetValueExW,
 };
-use windows::core::{PCWSTR, PWSTR, w};
-
-use crate::bengali::EraseMode;
+use windows::core::{PCWSTR, w};
 
 const RUN_KEY: PCWSTR = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
 const RUN_VALUE: PCWSTR = w!("okkhor-gui");
-const ERASE_KEY: PCWSTR = w!("Software\\okkhor-gui\\EraseMode");
 
-/// Everything the app stores, rooted here so uninstall can remove it in one go.
+/// Anything the app stores lands under here, so uninstall can remove it in one
+/// go. Nothing is written here at present; earlier versions kept per-executable
+/// backspace settings, and uninstall still clears the key so those are not left
+/// behind on machines that have them.
 pub const SETTINGS_KEY: PCWSTR = w!("Software\\okkhor-gui");
 
 pub fn wide(text: &str) -> Vec<u16> {
@@ -166,51 +164,5 @@ pub fn set_enabled_for(exe: &str, enabled: bool) {
         unsafe {
             let _ = RegDeleteValueW(key.0, RUN_VALUE);
         };
-    }
-}
-
-/// All remembered per-executable erase modes, keyed by full image path.
-pub fn load_erase_overrides() -> HashMap<String, EraseMode> {
-    let mut overrides = HashMap::new();
-    let Some(key) = Key::open(ERASE_KEY, false) else {
-        return overrides;
-    };
-
-    for index in 0.. {
-        // Value names are bounded by 16383 characters; paths are far shorter,
-        // but the buffer has to satisfy the API.
-        let mut name = [0u16; 512];
-        let mut name_len = name.len() as u32;
-        let mut data = [0u8; 64];
-        let mut data_len = data.len() as u32;
-
-        let status = unsafe {
-            RegEnumValueW(
-                key.0,
-                index,
-                Some(PWSTR(name.as_mut_ptr())),
-                &mut name_len,
-                None,
-                None,
-                Some(data.as_mut_ptr()),
-                Some(&mut data_len),
-            )
-        };
-        if status != ERROR_SUCCESS {
-            break;
-        }
-
-        let path = String::from_utf16_lossy(&name[..name_len as usize]);
-        let mode = EraseMode::from_registry_str(&from_wide_bytes(&data[..data_len as usize]));
-        overrides.insert(path, mode);
-    }
-
-    overrides
-}
-
-pub fn save_erase_override(exe_path: &str, mode: EraseMode) {
-    if let Some(key) = Key::open(ERASE_KEY, true) {
-        let name = wide(exe_path);
-        key.set(PCWSTR(name.as_ptr()), mode.as_registry_str());
     }
 }
