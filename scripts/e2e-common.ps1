@@ -145,7 +145,7 @@ function Pump {
 #
 # These tests synthesise real keystrokes, which go wherever the focus is. If you
 # switch to another application while they run, every remaining keystroke lands
-# in that application instead — and the suites press Backspace, F11 and F12, so
+# in that application instead — and the suites press Backspace and F11, so
 # that is not merely a wrong test result but a way to damage whatever you moved
 # on to. Aborting is the only safe response; the run reports itself as skipped
 # rather than failed, because nothing was actually measured.

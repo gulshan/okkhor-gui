@@ -10,17 +10,16 @@
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyState, VIRTUAL_KEY, VK_BACK, VK_CAPITAL, VK_CONTROL, VK_DECIMAL,
-    VK_F11, VK_F12, VK_LWIN, VK_MENU, VK_OEM_1, VK_OEM_3, VK_OEM_COMMA, VK_OEM_PERIOD, VK_RWIN,
-    VK_SHIFT,
+    VK_F11, VK_LWIN, VK_MENU, VK_OEM_1, VK_OEM_3, VK_OEM_COMMA, VK_OEM_PERIOD, VK_RWIN, VK_SHIFT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetForegroundWindow, KBDLLHOOKSTRUCT, MSLLHOOKSTRUCT, PostMessageW, WM_KEYDOWN,
     WM_KEYUP, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
 
+use crate::WM_APP_TOGGLE;
 use crate::input::OKKHOR_MAGIC;
 use crate::state::{self, App};
-use crate::{WM_APP_QUIT, WM_APP_TOGGLE};
 
 /// What a key means to the transliteration buffer.
 enum Action {
@@ -223,20 +222,15 @@ fn on_key_up(vk: u32) -> bool {
         .unwrap_or(false)
 }
 
-/// Handle F11/F12 here when `RegisterHotKey` was unavailable. Returns `None`
-/// when the key is not one of ours.
+/// Handle F11 here when `RegisterHotKey` was unavailable. Returns `None` when
+/// the key is not ours.
 fn fallback_hotkey(app: &App, vk: u32) -> Option<bool> {
-    if !app.hotkeys_via_hook {
+    if !app.hotkeys_via_hook || vk != VK_F11.0 as u32 {
         return None;
     }
-    let message = match vk {
-        v if v == VK_F11.0 as u32 => WM_APP_TOGGLE,
-        v if v == VK_F12.0 as u32 => WM_APP_QUIT,
-        _ => return None,
-    };
     // Posted rather than handled inline: the state is borrowed right now, and
     // the handlers need it too.
-    unsafe { PostMessageW(Some(app.msg_hwnd), message, WPARAM(0), LPARAM(0)).ok() };
+    unsafe { PostMessageW(Some(app.msg_hwnd), WM_APP_TOGGLE, WPARAM(0), LPARAM(0)).ok() };
     Some(true)
 }
 

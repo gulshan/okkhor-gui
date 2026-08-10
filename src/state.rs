@@ -55,7 +55,7 @@ pub struct App {
     /// back to the message loop.
     pub msg_hwnd: HWND,
     /// Set when `RegisterHotKey` failed and the keyboard hook has to detect
-    /// F11/F12 itself.
+    /// F11 itself.
     pub hotkeys_via_hook: bool,
     /// Keys whose key-down we swallowed, so we can swallow the matching key-up
     /// and not leave the target seeing half a keystroke.

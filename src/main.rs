@@ -2,7 +2,8 @@
 //!
 //! Runs headless with a notification-area icon. Each top-level window carries
 //! its own active/inactive mode, defaulting to inactive; F11 toggles the mode
-//! of the focused window and F12 quits. While a window is active, romanised
+//! of the focused window, and quitting is done from the tray menu. While a
+//! window is active, romanised
 //! keystrokes are swallowed, buffered, converted with the `okkhor` crate and
 //! re-emitted as Bangla with `SendInput`.
 
@@ -24,7 +25,7 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::CreateMutexW;
 use windows::Win32::UI::Accessibility::UnhookWinEvent;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    MOD_NOREPEAT, RegisterHotKey, UnregisterHotKey, VK_F11, VK_F12,
+    MOD_NOREPEAT, RegisterHotKey, UnregisterHotKey, VK_F11,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetForegroundWindow, GetMessageW, MSG,
@@ -38,11 +39,11 @@ use windows::core::w;
 pub const WM_APP_TRAY: u32 = WM_APP + 1;
 /// Posted by the keyboard hook when it has to stand in for `RegisterHotKey`.
 pub const WM_APP_TOGGLE: u32 = WM_APP + 2;
-/// Posted by the hook fallback or the tray menu to shut down.
+/// Posted by the tray menu, or by the installer asking a running instance to
+/// step aside, to shut down.
 pub const WM_APP_QUIT: u32 = WM_APP + 3;
 
 const HOTKEY_TOGGLE: i32 = 1;
-const HOTKEY_QUIT: i32 = 2;
 
 fn main() {
     // Install and uninstall run before the singleton guard: they are
@@ -117,7 +118,7 @@ fn run_tray_app() {
     let mouse = unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(keyboard::mouse_hook), None, 0) }.ok();
     let win_events = winevent::install();
 
-    register_hotkeys(hwnd);
+    register_hotkey(hwnd);
 
     // Seed the target so the tray shows something sensible before the first
     // focus change.
@@ -137,7 +138,6 @@ fn run_tray_app() {
     tray::remove();
     unsafe {
         let _ = UnregisterHotKey(Some(hwnd), HOTKEY_TOGGLE);
-        let _ = UnregisterHotKey(Some(hwnd), HOTKEY_QUIT);
         for hook in win_events {
             let _ = UnhookWinEvent(hook);
         }
@@ -148,25 +148,15 @@ fn run_tray_app() {
     }
 }
 
-/// Claim F11 and F12 globally, falling back to detecting them in the keyboard
-/// hook if the registration is refused — F12 in particular is reserved by the
-/// debugger engine and can be unavailable.
-fn register_hotkeys(hwnd: HWND) {
-    let toggle =
+/// Claim F11 globally, falling back to detecting it in the keyboard hook if the
+/// registration is refused — only one application at a time can hold a hotkey,
+/// so another one may already have it.
+fn register_hotkey(hwnd: HWND) {
+    let registered =
         unsafe { RegisterHotKey(Some(hwnd), HOTKEY_TOGGLE, MOD_NOREPEAT, VK_F11.0 as u32) };
-    let quit = unsafe { RegisterHotKey(Some(hwnd), HOTKEY_QUIT, MOD_NOREPEAT, VK_F12.0 as u32) };
-
-    if toggle.is_ok() && quit.is_ok() {
-        return;
+    if registered.is_err() {
+        state::with_app(|app| app.hotkeys_via_hook = true);
     }
-
-    // Mixing the two mechanisms would toggle twice per press, so drop whichever
-    // registration succeeded and let the hook handle both.
-    unsafe {
-        let _ = UnregisterHotKey(Some(hwnd), HOTKEY_TOGGLE);
-        let _ = UnregisterHotKey(Some(hwnd), HOTKEY_QUIT);
-    }
-    state::with_app(|app| app.hotkeys_via_hook = true);
 }
 
 fn toggle_foreground() {
@@ -191,10 +181,8 @@ unsafe extern "system" fn window_proc(
 ) -> LRESULT {
     match message {
         WM_HOTKEY => {
-            match wparam.0 as i32 {
-                HOTKEY_TOGGLE => toggle_foreground(),
-                HOTKEY_QUIT => unsafe { PostQuitMessage(0) },
-                _ => {}
+            if wparam.0 as i32 == HOTKEY_TOGGLE {
+                toggle_foreground();
             }
             LRESULT(0)
         }

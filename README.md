@@ -53,10 +53,8 @@ earlier runs.
 
 Run `okkhor-gui.exe`. There is no window — look for the tray icon.
 
-| | |
-|---|---|
-| **F11** | Toggle transliteration for the focused window |
-| **F12** | Quit |
+**F11** toggles transliteration for the focused window. That is the only key
+the program claims; quitting is done from the tray menu.
 
 Every window starts **inactive**, and the mode is remembered **per window**, not
 per application: two Notepad windows can be in different modes at the same time.
@@ -98,8 +96,8 @@ belongs in the diff, not in a setting.
   autostart entry cannot launch an elevated process without a UAC prompt — use a
   Task Scheduler entry with *Run with highest privileges* instead.
 - **F11 is claimed globally.** While okkhor-gui runs, browsers do not get F11 for
-  fullscreen. F12 is reserved by the Windows debugger engine; if registering
-  either hotkey is refused, the program detects both keys in its keyboard hook
+  fullscreen. Only one application at a time can hold a hotkey, so if the
+  registration is refused the program detects the key in its keyboard hook
   instead.
 - **Antivirus.** A global keyboard hook combined with `SendInput` is
   structurally identical to a keylogger. Unsigned builds may be flagged.

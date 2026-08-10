@@ -130,7 +130,7 @@ fn message(text: &str, caption: &str, style: MESSAGEBOX_STYLE) -> i32 {
 /// Ask a running instance to shut down and wait for it to let go of its files.
 ///
 /// Reuses the normal quit path, so it unhooks, drops the tray icon and
-/// unregisters the hotkeys exactly as F12 would.
+/// unregisters the hotkey exactly as the tray's Exit does.
 fn stop_running_instance() {
     let Ok(hwnd) = (unsafe { FindWindowW(w!("okkhor-gui.window"), PCWSTR::null()) }) else {
         return;
@@ -194,7 +194,8 @@ pub fn install(silent: bool) -> i32 {
         message(
             &format!(
                 "{APP_NAME} {VERSION} is installed and running.\n\n\
-                 Press F11 to switch a window to Bangla, F12 to quit."
+                 Press F11 to switch a window to Bangla. To quit, right-click \
+                 the tray icon and choose Exit."
             ),
             APP_NAME,
             MB_OK | MB_ICONINFORMATION,

@@ -298,7 +298,7 @@ pub fn show_menu(hwnd: HWND) {
 
         let toggle_text = wide("Active for this window\tF11");
         let autostart_text = wide("Start with Windows");
-        let exit_text = wide("Exit\tF12");
+        let exit_text = wide("Exit");
 
         let _ = AppendMenuW(
             menu,
