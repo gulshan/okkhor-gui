@@ -39,12 +39,7 @@ try {
     $typing = New-TestWindow 'okkhor e2e - focus noise' 80
     $other = New-TestWindow 'unrelated background window' 560
 
-    if (-not (Focus-Window $typing.Form)) {
-        'ABORT: could not take the foreground; keystrokes would land elsewhere.'
-        exit 2
-    }
-    $typing.Box.Focus() | Out-Null
-    Pump 400
+    Use-Window $typing
     Tap $VK.F11
     Pump 700
 

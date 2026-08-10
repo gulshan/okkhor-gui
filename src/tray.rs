@@ -8,10 +8,11 @@ use std::cell::RefCell;
 
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateBitmap, CreateCompatibleDC, CreateDIBSection,
-    CreateFontW, CreateSolidBrush, DEFAULT_CHARSET, DEFAULT_PITCH, DEFAULT_QUALITY, DIB_RGB_COLORS,
-    DT_CENTER, DT_SINGLELINE, DT_VCENTER, DeleteDC, DeleteObject, DrawTextW, FW_SEMIBOLD, FillRect,
-    HBITMAP, HGDIOBJ, OUT_DEFAULT_PRECIS, SelectObject, SetBkMode, SetTextColor, TRANSPARENT,
+    BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CLIP_DEFAULT_PRECIS, CreateBitmap, CreateCompatibleDC,
+    CreateDIBSection, CreateFontW, CreateSolidBrush, DEFAULT_CHARSET, DEFAULT_PITCH,
+    DEFAULT_QUALITY, DIB_RGB_COLORS, DT_CENTER, DT_SINGLELINE, DT_VCENTER, DeleteDC, DeleteObject,
+    DrawTextW, FW_SEMIBOLD, FillRect, HBITMAP, HGDIOBJ, OUT_DEFAULT_PRECIS, SelectObject,
+    SetBkMode, SetTextColor, TRANSPARENT,
 };
 use windows::Win32::UI::Shell::{
     NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NOTIFYICONDATAW,
@@ -24,19 +25,20 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{PCWSTR, w};
 
+use crate::autostart::wide;
 use crate::state;
 use crate::{WM_APP_QUIT, WM_APP_TRAY};
 
-pub const TRAY_ID: u32 = 1;
+const TRAY_ID: u32 = 1;
 
 const ICON_SIZE: i32 = 32;
 const ACTIVE_BACKGROUND: u32 = 0x00_3E_8E_1E; // 0x00BBGGRR — green
 const IDLE_BACKGROUND: u32 = 0x00_68_63_5F; // grey
 
 const CMD_TOGGLE: usize = 1;
-const CMD_AUTOSTART: usize = 3;
+const CMD_AUTOSTART: usize = 2;
+const CMD_INSTALL: usize = 3;
 const CMD_EXIT: usize = 4;
-const CMD_INSTALL: usize = 5;
 
 struct Tray {
     hwnd: HWND,
@@ -54,7 +56,7 @@ thread_local! {
 /// Kept separate from icon creation so the installer can write the very same
 /// artwork out as a real `.ico` file, rather than carrying a second copy of the
 /// drawing code. See [`crate::setup`].
-pub fn draw_glyph(size: i32, background: u32, glyph: PCWSTR, glyph_len: usize) -> Vec<u8> {
+fn draw_glyph(size: i32, background: u32, glyph: &str) -> Vec<u8> {
     let mut pixels = vec![0u8; (size * size * 4) as usize];
 
     unsafe {
@@ -100,7 +102,7 @@ pub fn draw_glyph(size: i32, background: u32, glyph: PCWSTR, glyph_len: usize) -
             0,
             DEFAULT_CHARSET,
             OUT_DEFAULT_PRECIS,
-            windows::Win32::Graphics::Gdi::CLIP_DEFAULT_PRECIS,
+            CLIP_DEFAULT_PRECIS,
             DEFAULT_QUALITY,
             DEFAULT_PITCH.0 as u32,
             w!("Nirmala UI"),
@@ -110,7 +112,7 @@ pub fn draw_glyph(size: i32, background: u32, glyph: PCWSTR, glyph_len: usize) -
         SetBkMode(dc, TRANSPARENT);
         SetTextColor(dc, COLORREF(0x00FF_FFFF));
 
-        let mut text: Vec<u16> = std::slice::from_raw_parts(glyph.0, glyph_len).to_vec();
+        let mut text: Vec<u16> = glyph.encode_utf16().collect();
         let mut text_area = area;
         DrawTextW(
             dc,
@@ -180,17 +182,14 @@ fn icon_from_pixels(size: i32, pixels: &[u8]) -> HICON {
     }
 }
 
-fn make_icon(background: u32, glyph: PCWSTR, glyph_len: usize) -> HICON {
-    icon_from_pixels(
-        ICON_SIZE,
-        &draw_glyph(ICON_SIZE, background, glyph, glyph_len),
-    )
+fn make_icon(background: u32, glyph: &str) -> HICON {
+    icon_from_pixels(ICON_SIZE, &draw_glyph(ICON_SIZE, background, glyph))
 }
 
 /// The app's identity artwork at an arbitrary size — the active tray icon,
 /// used by the installer for the Start Menu shortcut and Apps & Features.
 pub fn app_icon_pixels(size: i32) -> Vec<u8> {
-    draw_glyph(size, ACTIVE_BACKGROUND, w!("অ"), 1)
+    draw_glyph(size, ACTIVE_BACKGROUND, "অ")
 }
 
 fn base_data(hwnd: HWND) -> NOTIFYICONDATAW {
@@ -207,8 +206,8 @@ fn base_data(hwnd: HWND) -> NOTIFYICONDATAW {
 pub fn install(hwnd: HWND) {
     let tray = Tray {
         hwnd,
-        active: make_icon(ACTIVE_BACKGROUND, w!("অ"), 1),
-        idle: make_icon(IDLE_BACKGROUND, w!("A"), 1),
+        active: make_icon(ACTIVE_BACKGROUND, "অ"),
+        idle: make_icon(IDLE_BACKGROUND, "A"),
     };
 
     let mut data = base_data(hwnd);
@@ -271,10 +270,6 @@ fn write_tip(field: &mut [u16; 128], text: &str) {
     field[encoded.len()] = 0;
 }
 
-fn wide(text: &str) -> Vec<u16> {
-    text.encode_utf16().chain(std::iter::once(0)).collect()
-}
-
 /// Show the context menu and act on the selection.
 ///
 /// `TPM_RETURNCMD` makes `TrackPopupMenu` return the chosen command instead of
@@ -320,8 +315,8 @@ pub fn show_menu(hwnd: HWND) {
         );
         // Only meaningful while running from outside the install directory,
         // i.e. straight out of a downloads folder.
-        let install_text = wide("Install okkhor-gui on this PC…");
         if !crate::setup::running_from_install_dir() {
+            let install_text = wide("Install okkhor-gui on this PC…");
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
             let _ = AppendMenuW(menu, MF_STRING, CMD_INSTALL, PCWSTR(install_text.as_ptr()));
         }

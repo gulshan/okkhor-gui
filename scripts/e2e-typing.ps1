@@ -21,12 +21,7 @@ $window = $null
 try {
     $window = New-TestWindow 'okkhor e2e - typing'
 
-    if (-not (Focus-Window $window.Form)) {
-        'ABORT: could not take the foreground; keystrokes would land elsewhere.'
-        exit 2
-    }
-    $window.Box.Focus() | Out-Null
-    Pump 400
+    Use-Window $window
 
     # Every window starts inactive, so these keys must reach the control as-is.
     Type-Keys $VK.A, $VK.M, $VK.I

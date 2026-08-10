@@ -28,7 +28,6 @@ public class OkkhorE2E {
   }
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-  [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vk);
   [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr h);
   [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a, uint b, bool attach);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr pid);
@@ -100,15 +99,15 @@ public class OkkhorE2E {
 '@
 }
 
-# Virtual-key codes used by the tests.
+# Virtual-key codes used by the tests. Letters are just their ASCII capitals,
+# so a suite needing one that is not here can also pass [int][char]'X'.
 $VK = @{
-    A = 0x41; B = 0x42; D = 0x44; G = 0x47; H = 0x48; I = 0x49; K = 0x4B
-    L = 0x4C; M = 0x4D; N = 0x4E; O = 0x4F; S = 0x53; T = 0x54; U = 0x55
-    D0 = 0x30; D1 = 0x31; D3 = 0x33; D4 = 0x34; D6 = 0x36
-    Back = 0x08; Space = 0x20; LShift = 0xA0; F11 = 0x7A; F12 = 0x7B
+    A = 0x41; D = 0x44; G = 0x47; H = 0x48; I = 0x49; K = 0x4B
+    M = 0x4D; N = 0x4E; S = 0x53
+    D1 = 0x31; D3 = 0x33; D4 = 0x34; D6 = 0x36
+    Back = 0x08; Space = 0x20; LShift = 0xA0; F11 = 0x7A
     # OEM keys, positioned by a US layout — the same assumption the hook makes.
     Period = 0xBE     # .
-    Comma  = 0xBC     # ,
     Semi   = 0xBA     # ; and, shifted, :
     Grave  = 0xC0     # ` — Avro's "do not combine" marker
 }
@@ -141,11 +140,6 @@ function Pump {
     }
 }
 
-# Note the parameter names below. PowerShell variable names are case
-# insensitive, so a parameter called `$Vk` and the `$VK` table above are the
-# same variable: inside such a function `$VK.LShift` silently reads a property
-# off an integer and yields $null, which casts to byte 0 and presses nothing.
-# Hence `$KeyCode`.
 # Refuse to inject anything unless the window under test still has the
 # foreground.
 #
@@ -169,6 +163,11 @@ function Assert-Foreground {
     throw $script:ForegroundLost
 }
 
+# Note the parameter name. PowerShell variable names are case insensitive, so a
+# parameter called `$Vk` and the `$VK` table above are the same variable: inside
+# such a function `$VK.LShift` silently reads a property off an integer and
+# yields $null, which casts to byte 0 and presses nothing. Hence `$KeyCode`,
+# here and in Tap-Shifted.
 function Tap {
     param([int] $KeyCode)
     Assert-Foreground
@@ -208,6 +207,24 @@ function Focus-Window {
         }
     }
     return $false
+}
+
+# Take the foreground for a window built by New-TestWindow and put the caret in
+# its text box, ready to be typed into.
+#
+# Aborting with exit 2 rather than failing is deliberate: without the
+# foreground the keystrokes land in another application, so every check would
+# compare against an untouched box and report a fault that is not there.
+function Use-Window {
+    param($Window, [string] $Label)
+
+    if (-not (Focus-Window $Window.Form)) {
+        $which = if ($Label) { " ($Label)" } else { '' }
+        "ABORT: could not take the foreground$which; keystrokes would land elsewhere."
+        exit 2
+    }
+    $Window.Box.Focus() | Out-Null
+    Pump 400
 }
 
 function New-TestWindow {

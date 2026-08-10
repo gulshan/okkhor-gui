@@ -31,9 +31,8 @@ pub struct Replacement {
 /// characters and gave the opposite answer for Chromium.
 pub fn diff(old: &str, new: &str) -> Replacement {
     let mut at = old
-        .as_bytes()
-        .iter()
-        .zip(new.as_bytes())
+        .bytes()
+        .zip(new.bytes())
         .take_while(|(x, y)| x == y)
         .count();
 

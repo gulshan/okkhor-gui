@@ -10,29 +10,17 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 /// is also set by any other tool driving the keyboard.
 pub const OKKHOR_MAGIC: usize = 0x4F4B_4B48; // "OKKH"
 
-fn vk_event(vk: VIRTUAL_KEY, flags: KEYBD_EVENT_FLAGS) -> INPUT {
+/// One keyboard event. The two kinds sent from here fill in opposite fields: a
+/// virtual key carries no scan code, and a `KEYEVENTF_UNICODE` event carries a
+/// UTF-16 unit in `wScan` and no virtual key.
+fn key_event(vk: VIRTUAL_KEY, scan: u16, flags: KEYBD_EVENT_FLAGS) -> INPUT {
     INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 {
             ki: KEYBDINPUT {
                 wVk: vk,
-                wScan: 0,
+                wScan: scan,
                 dwFlags: flags,
-                time: 0,
-                dwExtraInfo: OKKHOR_MAGIC,
-            },
-        },
-    }
-}
-
-fn unicode_event(unit: u16, flags: KEYBD_EVENT_FLAGS) -> INPUT {
-    INPUT {
-        r#type: INPUT_KEYBOARD,
-        Anonymous: INPUT_0 {
-            ki: KEYBDINPUT {
-                wVk: VIRTUAL_KEY(0),
-                wScan: unit,
-                dwFlags: KEYEVENTF_UNICODE | flags,
                 time: 0,
                 dwExtraInfo: OKKHOR_MAGIC,
             },
@@ -53,12 +41,16 @@ pub fn send_replacement(backspaces: usize, text: &str) {
 
     let mut events = Vec::with_capacity(backspaces * 2 + units.len() * 2);
     for _ in 0..backspaces {
-        events.push(vk_event(VK_BACK, KEYBD_EVENT_FLAGS(0)));
-        events.push(vk_event(VK_BACK, KEYEVENTF_KEYUP));
+        events.push(key_event(VK_BACK, 0, KEYBD_EVENT_FLAGS(0)));
+        events.push(key_event(VK_BACK, 0, KEYEVENTF_KEYUP));
     }
     for unit in units {
-        events.push(unicode_event(unit, KEYBD_EVENT_FLAGS(0)));
-        events.push(unicode_event(unit, KEYEVENTF_KEYUP));
+        events.push(key_event(VIRTUAL_KEY(0), unit, KEYEVENTF_UNICODE));
+        events.push(key_event(
+            VIRTUAL_KEY(0),
+            unit,
+            KEYEVENTF_UNICODE | KEYEVENTF_KEYUP,
+        ));
     }
 
     unsafe {

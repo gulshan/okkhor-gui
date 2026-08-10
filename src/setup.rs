@@ -20,7 +20,7 @@ use windows::Win32::System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitFo
 use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
 use windows::Win32::UI::WindowsAndMessaging::{
     FindWindowW, IDYES, IsWindow, MB_ICONERROR, MB_ICONINFORMATION, MB_ICONQUESTION, MB_OK,
-    MB_YESNO, MessageBoxW, PostMessageW,
+    MB_YESNO, MESSAGEBOX_STYLE, MessageBoxW, PostMessageW,
 };
 use windows::core::{HSTRING, Interface, PCWSTR, w};
 
@@ -123,11 +123,7 @@ pub fn running_from_install_dir() -> bool {
     current.to_string_lossy().to_lowercase() == installed.to_string_lossy().to_lowercase()
 }
 
-fn message(
-    text: &str,
-    caption: &str,
-    style: windows::Win32::UI::WindowsAndMessaging::MESSAGEBOX_STYLE,
-) -> i32 {
+fn message(text: &str, caption: &str, style: MESSAGEBOX_STYLE) -> i32 {
     unsafe { MessageBoxW(None, &HSTRING::from(text), &HSTRING::from(caption), style).0 }
 }
 

@@ -9,8 +9,9 @@
 
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, GetKeyState, VK_BACK, VK_CAPITAL, VK_CONTROL, VK_DECIMAL, VK_F11, VK_F12,
-    VK_LWIN, VK_MENU, VK_OEM_1, VK_OEM_3, VK_OEM_COMMA, VK_OEM_PERIOD, VK_RWIN, VK_SHIFT,
+    GetAsyncKeyState, GetKeyState, VIRTUAL_KEY, VK_BACK, VK_CAPITAL, VK_CONTROL, VK_DECIMAL,
+    VK_F11, VK_F12, VK_LWIN, VK_MENU, VK_OEM_1, VK_OEM_3, VK_OEM_COMMA, VK_OEM_PERIOD, VK_RWIN,
+    VK_SHIFT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetForegroundWindow, KBDLLHOOKSTRUCT, MSLLHOOKSTRUCT, PostMessageW, WM_KEYDOWN,
@@ -35,7 +36,7 @@ enum Action {
     Transparent,
 }
 
-fn modifier_held(vk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY) -> bool {
+fn modifier_held(vk: VIRTUAL_KEY) -> bool {
     (unsafe { GetAsyncKeyState(vk.0 as i32) } as u16 & 0x8000) != 0
 }
 

@@ -34,12 +34,7 @@ function Reset-Box {
 try {
     $window = New-TestWindow 'okkhor e2e - punctuation'
 
-    if (-not (Focus-Window $window.Form)) {
-        'ABORT: could not take the foreground; keystrokes would land elsewhere.'
-        exit 2
-    }
-    $window.Box.Focus() | Out-Null
-    Pump 400
+    Use-Window $window
 
     Tap $VK.F11
     Pump 700

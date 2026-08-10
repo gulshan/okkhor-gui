@@ -21,9 +21,7 @@ try {
     $a = New-TestWindow 'okkhor e2e - window A' 80
     $b = New-TestWindow 'okkhor e2e - window B' 560
 
-    if (-not (Focus-Window $a.Form)) { 'ABORT: no foreground on A'; exit 2 }
-    $a.Box.Focus() | Out-Null
-    Pump 300
+    Use-Window $a 'window A'
 
     # Activate window A only.
     Tap $VK.F11
@@ -33,16 +31,12 @@ try {
 
     # Window B belongs to the same process but is a different HWND, so it must
     # still be inactive.
-    if (-not (Focus-Window $b.Form)) { 'ABORT: no foreground on B'; exit 2 }
-    $b.Box.Focus() | Out-Null
-    Pump 500
+    Use-Window $b 'window B'
     Type-Keys $VK.A, $VK.M, $VK.I
     Check 'B stays inactive in the same process' 'ami' $b.Box.Text
 
     # Returning to A must find its mode intact.
-    if (-not (Focus-Window $a.Form)) { 'ABORT: no foreground back on A'; exit 2 }
-    $a.Box.Focus() | Out-Null
-    Pump 500
+    Use-Window $a 'back on window A'
     Type-Keys $VK.Space, $VK.G, $VK.A, $VK.N
     Check 'A keeps its mode across the switch' $AMI_GAN $a.Box.Text
 }
