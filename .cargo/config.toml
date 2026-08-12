@@ -1,0 +1,12 @@
+# Link the C runtime statically.
+#
+# Without this the executable imports vcruntime140.dll, which Windows does not
+# ship — it arrives with the Visual C++ Redistributable. That is present on most
+# development machines and absent on a clean install, where the app would die
+# with a missing-DLL dialog before any of its own code runs. Since it installs
+# itself from a single downloaded file, there is nothing to carry a redist
+# alongside it.
+#
+# Every remaining import is an operating-system DLL. Costs roughly 90 KB.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

@@ -126,6 +126,11 @@ cargo build --release
 
 The only dependencies are `okkhor`, with its `editor` feature, and `windows`.
 
+`.cargo/config.toml` links the C runtime statically, so every DLL the
+executable imports ships with Windows itself — there is no Visual C++
+Redistributable to install alongside it, which matters for something that
+arrives as a single downloaded file. It costs about 90 KB.
+
 ## Tests
 
 ```bash
