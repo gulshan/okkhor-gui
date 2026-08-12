@@ -6,7 +6,7 @@ description = "Background Bangla phonetic input for Windows, powered by the okkh
 license = "MIT"
 
 [dependencies]
-okkhor = "0.8"
+okkhor = { version = "0.10", features = ["editor"] }
 
 [dependencies.windows]
 version = "0.62"

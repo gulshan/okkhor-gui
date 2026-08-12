@@ -13,7 +13,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use okkhor::parser::Parser;
+use okkhor::editor::Editor;
 use windows::Win32::Foundation::{CloseHandle, HWND, MAX_PATH};
 use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
@@ -21,31 +21,13 @@ use windows::Win32::System::Threading::{
 use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, GetWindowThreadProcessId, IsWindow};
 use windows::core::PWSTR;
 
-use crate::input;
-
-/// The romanised text typed so far and the Bangla currently showing for it.
-#[derive(Default)]
-pub struct Session {
-    pub raw: String,
-    pub emitted: String,
-}
-
-impl Session {
-    /// Forget the current word without touching the screen. Used whenever we
-    /// lose track of where the caret is (focus change, mouse click, arrow
-    /// key), so a desync can never propagate past one word.
-    pub fn clear(&mut self) {
-        self.raw.clear();
-        self.emitted.clear();
-    }
-}
-
 pub struct App {
-    pub parser: Parser,
+    /// Buffers the romanised word, converts it, and reports the smallest change
+    /// to the text on screen. See [`App::abandon_word`].
+    pub editor: Editor,
     /// Per top-level window: is transliteration active? Absent means inactive,
     /// which is the required default.
     pub modes: HashMap<isize, bool>,
-    pub session: Session,
     /// The window keystrokes are going to. Cached by the WinEvent hook so the
     /// tray menu still knows the real target after the shell steals focus.
     pub target: HWND,
@@ -65,9 +47,8 @@ pub struct App {
 impl App {
     fn new() -> Self {
         App {
-            parser: Parser::new_phonetic(),
+            editor: Editor::new_phonetic(),
             modes: HashMap::new(),
-            session: Session::default(),
             target: HWND(std::ptr::null_mut()),
             target_exe: String::new(),
             msg_hwnd: HWND(std::ptr::null_mut()),
@@ -80,9 +61,18 @@ impl App {
         self.modes.get(&key_of(hwnd)).copied().unwrap_or(false)
     }
 
+    /// Abandon the word being typed without touching the screen.
+    ///
+    /// Called whenever we lose track of where the caret is, so a desync can
+    /// never propagate past one word. The editor keeps no claim on the text it
+    /// already emitted; what is on screen stays there.
+    pub fn abandon_word(&mut self) {
+        self.editor.put_non_char();
+    }
+
     /// Flip the mode of `hwnd` and return the new value.
     pub fn toggle(&mut self, hwnd: HWND) -> bool {
-        self.session.clear();
+        self.abandon_word();
         let flag = self.modes.entry(key_of(hwnd)).or_insert(false);
         *flag = !*flag;
         let now = *flag;
@@ -103,14 +93,6 @@ impl App {
     pub fn retarget(&mut self, hwnd: HWND) {
         self.target = hwnd;
         self.target_exe = exe_path_of(hwnd);
-    }
-
-    /// Re-convert the buffer and patch the difference onto the screen.
-    pub fn render(&mut self) {
-        let next = self.parser.convert(&self.session.raw);
-        let replacement = crate::bengali::diff(&self.session.emitted, &next);
-        input::send_replacement(replacement.backspaces, &replacement.text);
-        self.session.emitted = next;
     }
 }
 

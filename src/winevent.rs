@@ -61,7 +61,7 @@ unsafe extern "system" fn win_event_proc(
                 return;
             }
             state::with_app(|app| {
-                app.session.clear();
+                app.abandon_word();
                 app.retarget(hwnd);
             });
             tray::refresh();
@@ -81,7 +81,7 @@ unsafe extern "system" fn win_event_proc(
             let root = unsafe { GetAncestor(hwnd, GA_ROOT) };
             state::with_app(|app| {
                 if !app.target.is_invalid() && (root == app.target || hwnd == app.target) {
-                    app.session.clear();
+                    app.abandon_word();
                 }
             });
         }

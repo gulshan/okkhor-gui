@@ -67,26 +67,32 @@ switch, and Exit. Autostart is never enabled behind your back; it writes
 
 ## How it types
 
-A `WH_KEYBOARD_LL` hook swallows the romanised keystrokes, buffers the word,
-re-converts the whole buffer on every keypress, and rewrites the on-screen text
-with `SendInput`. Only the part that actually changed is rewritten, so typing
-`ami` sends `আ`, then `ম`, then one backspace and `মি`.
+A `WH_KEYBOARD_LL` hook swallows the romanised keystrokes and feeds them to
+okkhor's `Editor`, which buffers the word, re-converts it on every keypress and
+reports the smallest change to the text on screen. That change is applied with
+`SendInput`. Typing `ami` sends `আ`, then `ম`, then `ি` — the `ম` already on
+screen is kept and the vowel sign lands on it.
 
-A word ends at space, punctuation, Enter, an arrow key, a mouse click or a
-focus change. At that point the buffer is dropped without touching the screen,
-so a mistake can never cascade past the word you are typing.
+A word ends at a space, Backspace, Enter, an arrow key, a mouse click or a
+focus change. The buffer is dropped without touching the screen, so a mistake
+can never cascade past the word you are typing. The punctuation in the table
+above does *not* end a word: it has to stay buffered for `..` to become `।।`
+and for the dot in `3.14` to stay a dot.
 
 ### Backspacing over Bangla
 
-Rewriting the preview means backspacing over Bangla that is already on screen,
-so the count has to match what one `VK_BACK` removes in the target. One backspace
+Rewriting the preview means erasing Bangla that is already on screen, so the
+count has to match what one `VK_BACK` removes in the target. One backspace
 erases **one code point** in every application measured: Win32 edit controls,
 WinForms `TextBox` and `RichTextBox`, WPF `TextBox`, and Chromium — the last
 checked end to end by typing into Edge 148 and reading the field back.
 
-There is nothing to configure. If some application ever turns out to erase more
-than a code point per press, conjuncts will leave debris there and the fix
-belongs in the diff, not in a setting.
+Pressing Backspace yourself is a different thing: it ends the word and reaches
+the application unchanged, deleting one code point. Mid-word that is what you
+want — backspacing over `আমি` leaves `আম`. Over a conjunct it is visible:
+`ক্ষ` becomes `ক্`, not `ক`, because the application deletes a code point and
+has no idea the conjunct was three of them. Type on and the next word converts
+normally.
 
 ## Limitations
 
@@ -118,7 +124,7 @@ Needs Rust 1.82 or newer (developed against 1.97).
 cargo build --release
 ```
 
-The only dependencies are `okkhor` and `windows`.
+The only dependencies are `okkhor`, with its `editor` feature, and `windows`.
 
 ## Tests
 
@@ -126,10 +132,12 @@ The only dependencies are `okkhor` and `windows`.
 cargo test
 ```
 
-The on-screen diff and the conversions are pure logic and carry the
-test suite, including an end-to-end simulation that drives the real parser
-through the same buffer-and-diff loop the keyboard hook uses and asserts the
-modelled screen matches the parser's output after every keystroke.
+The live preview belongs to okkhor's `Editor` and is tested there. What is
+tested here is the contract between that and the keyboard hook: that the
+punctuation the hook routes into the buffer is exactly the punctuation okkhor
+converts and survives the editor's printable-ASCII filter, that case picks a
+different consonant so Shift may not break a word, and that a later letter can
+reinterpret an earlier one so no word may be split between letters.
 
 The parts that need a live desktop — the keyboard hook, the global hotkeys and
 `SendInput` injection — cannot be reached from `cargo test`. Those live in

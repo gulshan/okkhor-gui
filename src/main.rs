@@ -10,7 +10,6 @@
 #![windows_subsystem = "windows"]
 
 mod autostart;
-mod bengali;
 mod input;
 mod keyboard;
 mod setup;

@@ -4,9 +4,9 @@ version = 4
 
 [[package]]
 name = "okkhor"
-version = "0.8.2"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67017e8384e3c8d9c803a4fe3e1a91c314df0558e63133e077a7ea94f646793e"
+checksum = "5a98d3aad61053bfbb057eab54e9261b51c8bb42a94a17757ed0962b8247598d"
 
 [[package]]
 name = "okkhor-gui"
