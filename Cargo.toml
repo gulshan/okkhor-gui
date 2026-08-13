@@ -1,6 +1,6 @@
 [package]
 name = "okkhor-gui"
-version = "0.1.0"
+version = "0.1.0-beta.1"
 edition = "2024"
 description = "Background Bangla phonetic input for Windows, powered by the okkhor crate"
 license = "MIT"

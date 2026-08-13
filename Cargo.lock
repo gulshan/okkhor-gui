@@ -10,7 +10,7 @@ checksum = "5a98d3aad61053bfbb057eab54e9261b51c8bb42a94a17757ed0962b8247598d"
 
 [[package]]
 name = "okkhor-gui"
-version = "0.1.0"
+version = "0.1.0-beta.1"
 dependencies = [
  "okkhor",
  "windows",
