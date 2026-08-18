@@ -8,30 +8,33 @@
 #
 #   pwsh -File scripts\e2e-install.ps1
 #
-# Refuses to run if okkhor-gui is already installed, so a real installation is
+# Refuses to run if the app is already installed, so a real installation is
 # never destroyed by the test.
 
 . (Join-Path $PSScriptRoot 'e2e-common.ps1')
 Assert-DesktopUnlocked
 
-$InstallDir   = Join-Path $env:LOCALAPPDATA 'Programs\okkhor-gui'
-$InstalledExe = Join-Path $InstallDir 'okkhor-gui.exe'
-$IconFile     = Join-Path $InstallDir 'okkhor-gui.ico'
-$Shortcut     = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\okkhor-gui.lnk'
-$UninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\okkhor-gui'
+$InstallDir   = Join-Path $env:LOCALAPPDATA 'Programs\okkhor'
+$InstalledExe = Join-Path $InstallDir 'okkhor.exe'
+$IconFile     = Join-Path $InstallDir 'okkhor.ico'
+$Shortcut     = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Okkhor.lnk'
+$UninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\okkhor'
 $RunKey       = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+# Deliberately the old name: nothing writes here now, but uninstall still clears
+# it so machines that ran an earlier build are left clean.
 $SettingsKey  = 'HKCU:\Software\okkhor-gui'
 
 if ((Test-Path $InstallDir) -or (Test-Path $UninstallKey)) {
-    'ABORT: okkhor-gui is already installed.'
+    'ABORT: the app is already installed.'
     'This test installs and then uninstalls, so it will not run against a real'
     'installation. Uninstall first if you want to run it.'
     exit 2
 }
 
-$AMI = Text-Of 0x0986, 0x09AE, 0x09BF   # আমি
+$AMI      = Text-Of 0x0986, 0x09AE, 0x09BF                     # আমি
+$APP_NAME = Text-Of 0x0985, 0x0995, 0x09CD, 0x09B7, 0x09B0     # অক্ষর
 
-$staging = Join-Path ([System.IO.Path]::GetTempPath()) "okkhor-gui-e2e-$PID"
+$staging = Join-Path ([System.IO.Path]::GetTempPath()) "okkhor-e2e-$PID"
 $window = $null
 
 # Run a setup command and wait for *that* process only.
@@ -61,7 +64,7 @@ try {
     # Stand in for a downloaded copy: install from somewhere that is not the
     # build tree and not the install directory.
     New-Item -ItemType Directory -Path $staging -Force | Out-Null
-    $downloaded = Join-Path $staging 'okkhor-gui.exe'
+    $downloaded = Join-Path $staging 'okkhor.exe'
     Copy-Item (Resolve-OkkhorExe) $downloaded
 
     Invoke-Setup $downloaded @('--install', '--silent')
@@ -72,17 +75,17 @@ try {
     Check 'start menu shortcut'    'True' "$(Test-Path $Shortcut)"
 
     $entry = Get-ItemProperty $UninstallKey -ErrorAction SilentlyContinue
-    Check 'appears in Apps & Features' 'okkhor-gui' "$($entry.DisplayName)"
+    Check 'appears in Apps & Features' $APP_NAME "$($entry.DisplayName)"
     Check 'records a version'          'True'       "$([bool]$entry.DisplayVersion)"
     Check 'records an uninstaller'     "`"$InstalledExe`" --uninstall" "$($entry.UninstallString)"
     Check 'DisplayIcon points at the .ico' $IconFile "$($entry.DisplayIcon)"
     Check 'NoModify is a DWORD'        'Int32'      "$($entry.NoModify.GetType().Name)"
 
     $run = Get-ItemProperty $RunKey -ErrorAction SilentlyContinue
-    Check 'autostart enabled by install' "`"$InstalledExe`"" "$($run.'okkhor-gui')"
+    Check 'autostart enabled by install' "`"$InstalledExe`"" "$($run.'okkhor')"
 
-    Wait-For { Get-Process okkhor-gui -ErrorAction SilentlyContinue } | Out-Null
-    Check 'installed copy is running' 'True' "$([bool](Get-Process okkhor-gui -ErrorAction SilentlyContinue))"
+    Wait-For { Get-Process okkhor -ErrorAction SilentlyContinue } | Out-Null
+    Check 'installed copy is running' 'True' "$([bool](Get-Process okkhor -ErrorAction SilentlyContinue))"
 
     # Writing a Start Menu shortcut makes the shell announce a newly installed
     # app, and that notification is a foreground-stealing CoreWindow. Let it
@@ -113,14 +116,14 @@ try {
     Invoke-Setup $InstalledExe @('--uninstall', '--silent')
     Wait-For { -not (Test-Path $InstallDir) } -Seconds 20 | Out-Null
 
-    Check 'process stopped'          'False' "$([bool](Get-Process okkhor-gui -ErrorAction SilentlyContinue))"
+    Check 'process stopped'          'False' "$([bool](Get-Process okkhor -ErrorAction SilentlyContinue))"
     Check 'install directory removed' 'False' "$(Test-Path $InstallDir)"
     Check 'shortcut removed'          'False' "$(Test-Path $Shortcut)"
     Check 'Apps & Features entry removed' 'False' "$(Test-Path $UninstallKey)"
     Check 'settings key removed'      'False' "$(Test-Path $SettingsKey)"
 
     $run = Get-ItemProperty $RunKey -ErrorAction SilentlyContinue
-    Check 'autostart entry removed'   'False' "$([bool]$run.'okkhor-gui')"
+    Check 'autostart entry removed'   'False' "$([bool]$run.'okkhor')"
 }
 catch {
     # Foreground lost mid-run. Stop rather than type the rest into whatever took
@@ -129,7 +132,7 @@ catch {
 }
 finally {
     if ($window) { $window.Form.Close(); Pump 200 }
-    Stop-Process -Name okkhor-gui -Force -ErrorAction SilentlyContinue
+    Stop-Process -Name okkhor -Force -ErrorAction SilentlyContinue
     Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
     # Belt and braces: if an assertion failed midway, do not leave the machine
     # with a half-installed app.
@@ -137,7 +140,7 @@ finally {
     Remove-Item $Shortcut -Force -ErrorAction SilentlyContinue
     Remove-Item $UninstallKey -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item $SettingsKey -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-ItemProperty -Path $RunKey -Name 'okkhor-gui' -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path $RunKey -Name 'okkhor' -ErrorAction SilentlyContinue
 }
 
 Complete-Run

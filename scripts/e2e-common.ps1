@@ -260,9 +260,9 @@ function Assert-DesktopUnlocked {
 }
 
 function Resolve-OkkhorExe {
-    $exe = Join-Path $PSScriptRoot '..\target\release\okkhor-gui.exe'
+    $exe = Join-Path $PSScriptRoot '..\target\release\okkhor.exe'
     if (-not (Test-Path $exe)) {
-        throw "okkhor-gui.exe not found. Run 'cargo build --release' first."
+        throw "okkhor.exe not found. Run 'cargo build --release' first."
     }
     return (Resolve-Path $exe).Path
 }

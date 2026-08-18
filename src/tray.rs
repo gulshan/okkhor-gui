@@ -1,8 +1,4 @@
-//! Notification-area icon and its context menu.
-//!
-//! The two icons are drawn with GDI at startup rather than shipped as `.ico`
-//! resources, which keeps the program a single self-contained executable
-//! without pulling in a resource-compiler build dependency.
+//! Notification-area icon and context menu.
 
 use std::cell::RefCell;
 
@@ -50,12 +46,7 @@ thread_local! {
     static TRAY: RefCell<Option<Tray>> = const { RefCell::new(None) };
 }
 
-/// A square filled with `background` and a single glyph centred on it, as
-/// top-down BGRA pixels.
-///
-/// Kept separate from icon creation so the installer can write the very same
-/// artwork out as a real `.ico` file, rather than carrying a second copy of the
-/// drawing code. See [`crate::setup`].
+/// Render a solid background with a centered glyph to BGRA pixel buffer.
 fn draw_glyph(size: i32, background: u32, glyph: &str) -> Vec<u8> {
     let mut pixels = vec![0u8; (size * size * 4) as usize];
 
@@ -212,7 +203,7 @@ pub fn install(hwnd: HWND) {
 
     let mut data = base_data(hwnd);
     data.hIcon = tray.idle;
-    write_tip(&mut data.szTip, "okkhor-gui");
+    write_tip(&mut data.szTip, crate::setup::APP_NAME);
     unsafe {
         let _ = Shell_NotifyIconW(NIM_ADD, &data);
     };
@@ -227,7 +218,7 @@ pub fn refresh() {
         let active = app.is_active(app.target);
         let name = state::exe_name(&app.target_exe);
         let label = if name.is_empty() {
-            "okkhor-gui".to_string()
+            crate::setup::APP_NAME.to_string()
         } else {
             format!("{name} — {}", if active { "ACTIVE" } else { "inactive" })
         };
@@ -313,10 +304,9 @@ pub fn show_menu(hwnd: HWND) {
             CMD_AUTOSTART,
             PCWSTR(autostart_text.as_ptr()),
         );
-        // Only meaningful while running from outside the install directory,
-        // i.e. straight out of a downloads folder.
+
         if !crate::setup::running_from_install_dir() {
-            let install_text = wide("Install okkhor-gui on this PC…");
+            let install_text = wide(&format!("Install {} on this PC…", crate::setup::APP_NAME));
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
             let _ = AppendMenuW(menu, MF_STRING, CMD_INSTALL, PCWSTR(install_text.as_ptr()));
         }

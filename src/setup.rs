@@ -27,12 +27,28 @@ use windows::core::{HSTRING, Interface, PCWSTR, w};
 use crate::WM_APP_QUIT;
 use crate::autostart::{self, Key};
 
-const APP_NAME: &str = "okkhor-gui";
+/// What the user sees: dialog captions, the Apps & Features entry, the tray.
+pub const APP_NAME: &str = "অক্ষর";
+
+/// The same name in ASCII, for the Start Menu entry.
+///
+/// Start Menu search matches what you type, and the people who want this app
+/// are by definition typing romanised Bangla on an English keyboard — a Bangla
+/// file name there would be unfindable without the app already running.
+const APP_NAME_ASCII: &str = "Okkhor";
+
+/// Stem for everything on disk and in the registry, where a name is an
+/// identifier rather than something to read.
+const APP_ID: &str = "okkhor";
+
 const PUBLISHER: &str = "Gulshanur Rahman";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const UNINSTALL_KEY: PCWSTR =
-    w!("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\okkhor-gui");
+/// Class of the hidden window that owns the hotkey and the tray icon. Also how
+/// [`stop_running_instance`] finds an instance that is already up.
+pub const WINDOW_CLASS: PCWSTR = w!("okkhor.window");
+
+const UNINSTALL_KEY: PCWSTR = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\okkhor");
 
 /// What this invocation is supposed to do.
 pub enum Mode {
@@ -97,22 +113,22 @@ pub fn parse_args() -> Mode {
 
 pub fn install_dir() -> PathBuf {
     let base = std::env::var("LOCALAPPDATA").unwrap_or_default();
-    PathBuf::from(base).join("Programs").join(APP_NAME)
+    PathBuf::from(base).join("Programs").join(APP_ID)
 }
 
 fn installed_exe() -> PathBuf {
-    install_dir().join("okkhor-gui.exe")
+    install_dir().join(format!("{APP_ID}.exe"))
 }
 
 fn icon_path() -> PathBuf {
-    install_dir().join("okkhor-gui.ico")
+    install_dir().join(format!("{APP_ID}.ico"))
 }
 
 fn shortcut_path() -> PathBuf {
     let base = std::env::var("APPDATA").unwrap_or_default();
     PathBuf::from(base)
         .join("Microsoft\\Windows\\Start Menu\\Programs")
-        .join(format!("{APP_NAME}.lnk"))
+        .join(format!("{APP_NAME_ASCII}.lnk"))
 }
 
 pub fn running_from_install_dir() -> bool {
@@ -132,7 +148,7 @@ fn message(text: &str, caption: &str, style: MESSAGEBOX_STYLE) -> i32 {
 /// Reuses the normal quit path, so it unhooks, drops the tray icon and
 /// unregisters the hotkey exactly as the tray's Exit does.
 fn stop_running_instance() {
-    let Ok(hwnd) = (unsafe { FindWindowW(w!("okkhor-gui.window"), PCWSTR::null()) }) else {
+    let Ok(hwnd) = (unsafe { FindWindowW(WINDOW_CLASS, PCWSTR::null()) }) else {
         return;
     };
     if hwnd.is_invalid() {
@@ -221,7 +237,7 @@ fn sweep_stale_finishers() {
         let is_finisher = path
             .file_name()
             .and_then(|n| n.to_str())
-            .is_some_and(|n| n.starts_with("okkhor-gui-uninstall-") && n.ends_with(".exe"));
+            .is_some_and(|n| n.starts_with("okkhor-uninstall-") && n.ends_with(".exe"));
 
         if is_finisher && path != own {
             let _ = std::fs::remove_file(&path);
@@ -302,7 +318,7 @@ pub fn uninstall(silent: bool) -> i32 {
 /// Copy ourselves to `%TEMP%` and hand over the deletion of `dir`.
 fn spawn_finisher(dir: &Path) -> std::io::Result<()> {
     let pid = std::process::id();
-    let temp = std::env::temp_dir().join(format!("okkhor-gui-uninstall-{pid}.exe"));
+    let temp = std::env::temp_dir().join(format!("okkhor-uninstall-{pid}.exe"));
     std::fs::copy(autostart::own_exe_path(), &temp)?;
 
     std::process::Command::new(&temp)

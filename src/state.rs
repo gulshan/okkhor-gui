@@ -61,16 +61,12 @@ impl App {
         self.modes.get(&key_of(hwnd)).copied().unwrap_or(false)
     }
 
-    /// Abandon the word being typed without touching the screen.
-    ///
-    /// Called whenever we lose track of where the caret is, so a desync can
-    /// never propagate past one word. The editor keeps no claim on the text it
-    /// already emitted; what is on screen stays there.
+    /// Discard current transliteration buffer.
     pub fn abandon_word(&mut self) {
         self.editor.put_non_char();
     }
 
-    /// Flip the mode of `hwnd` and return the new value.
+    /// Toggle mode for `hwnd` and return the new state.
     pub fn toggle(&mut self, hwnd: HWND) -> bool {
         self.abandon_word();
         let flag = self.modes.entry(key_of(hwnd)).or_insert(false);
@@ -88,8 +84,7 @@ impl App {
             .retain(|&raw, _| unsafe { IsWindow(Some(hwnd_of(raw))).as_bool() });
     }
 
-    /// Re-resolve the cached target and everything derived from it. Called
-    /// from the WinEvent hook, never from the keyboard hook.
+    /// Update target window and cached executable path.
     pub fn retarget(&mut self, hwnd: HWND) {
         self.target = hwnd;
         self.target_exe = exe_path_of(hwnd);
@@ -172,7 +167,6 @@ pub fn exe_path_of(hwnd: HWND) -> String {
     }
 }
 
-/// Just the file name, for display.
 pub fn exe_name(path: &str) -> &str {
     path.rsplit(['\\', '/']).next().unwrap_or(path)
 }

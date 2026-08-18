@@ -16,14 +16,13 @@ use windows::Win32::System::Registry::{
 use windows::core::{PCWSTR, w};
 
 const RUN_KEY: PCWSTR = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
-const RUN_VALUE: PCWSTR = w!("okkhor-gui");
+const RUN_VALUE: PCWSTR = w!("okkhor");
 
-/// Where any per-user setting would live, so uninstall can clear the lot with
-/// one call.
+/// A key older builds wrote per-executable settings to, still cleared on
+/// uninstall so those machines are left clean.
 ///
-/// Nothing writes here today. It is kept because older builds did, and
-/// uninstall has to leave those machines clean — not because the key is
-/// unused should it be removed.
+/// Nothing writes here now, and the name is deliberately the old one — pointing
+/// it at the current name would leave the key it exists to remove behind.
 pub const SETTINGS_KEY: PCWSTR = w!("Software\\okkhor-gui");
 
 pub fn wide(text: &str) -> Vec<u16> {

@@ -1,9 +1,4 @@
-//! Reacting to focus movement.
-//!
-//! Two things happen here. The typing buffer is abandoned whenever focus moves,
-//! because the caret is no longer where we left it. And the comparatively
-//! expensive work of resolving the foreground process is done here rather than
-//! in the keyboard hook, so it stays off the per-keystroke path.
+//! Window focus and lifetime event listeners.
 
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook};
@@ -54,9 +49,6 @@ unsafe extern "system" fn win_event_proc(
 ) {
     match event {
         EVENT_SYSTEM_FOREGROUND if id_object == OBJID_WINDOW.0 => {
-            // Clicking the notification area momentarily makes an explorer
-            // window the foreground one. Adopting it as the target would point
-            // the tray menu at the wrong application.
             if state::is_shell_window(hwnd) {
                 return;
             }

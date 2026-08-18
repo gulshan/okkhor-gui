@@ -1,4 +1,4 @@
-//! okkhor-gui — background Bangla phonetic input for Windows.
+//! অক্ষর — background Bangla phonetic input for Windows.
 //!
 //! Runs headless with a notification-area icon. Each top-level window carries
 //! its own active/inactive mode, defaulting to inactive; F11 toggles the mode
@@ -68,7 +68,7 @@ fn main() {
 fn run_tray_app() {
     // A second instance would install a second set of hooks and every
     // keystroke would be transliterated twice.
-    let _singleton = unsafe { CreateMutexW(None, true, w!("Local\\okkhor-gui-singleton")) };
+    let _singleton = unsafe { CreateMutexW(None, true, w!("Local\\okkhor-singleton")) };
     if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
         return;
     }
@@ -78,7 +78,7 @@ fn run_tray_app() {
     let class = WNDCLASSW {
         lpfnWndProc: Some(window_proc),
         hInstance: instance.into(),
-        lpszClassName: w!("okkhor-gui.window"),
+        lpszClassName: setup::WINDOW_CLASS,
         ..Default::default()
     };
     unsafe { RegisterClassW(&class) };
@@ -94,8 +94,8 @@ fn run_tray_app() {
     let hwnd = unsafe {
         CreateWindowExW(
             WS_EX_TOOLWINDOW,
-            w!("okkhor-gui.window"),
-            w!("okkhor-gui"),
+            setup::WINDOW_CLASS,
+            w!("অক্ষর"),
             WS_POPUP,
             0,
             0,

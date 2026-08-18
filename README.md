@@ -1,4 +1,4 @@
-# okkhor-gui
+# অক্ষর
 
 Background Bangla phonetic input for Windows. Type Avro-style romanised English
 in any application and watch it become Bangla as you type. Transliteration comes
@@ -23,22 +23,40 @@ converted too:
 
 A trailing backtick escapes any of them: `` .` `` types a literal full stop.
 
+## Scope
+
+Deliberately small. A hotkey, a mode per window, a tray icon, and one setting —
+Start with Windows. No layout options, no custom phonetic rules, no dictionary,
+no candidate list or suggestion popup. What you type converts as you type it,
+and that is the whole of it.
+
+If you want more than that, use
+[**অভ্র** (Avro Keyboard)](https://www.omicronlab.com/avro-keyboard.html). It is
+the original of this romanisation, it is far more configurable, and it has the
+visible suggestion mode this has no equivalent of — you see candidate spellings
+and pick one, rather than getting a single conversion as you type.
+
 ## Installing
 
 The executable is its own installer. Double-click it and it offers to install
 for the current user; choose No to run it from where it sits instead.
 
 ```
-okkhor-gui.exe --install      install without asking
-okkhor-gui.exe --uninstall    remove it
-okkhor-gui.exe --portable     run from here, never ask
---silent                      suppress all dialogs, for scripting
+okkhor.exe --install      install without asking
+okkhor.exe --uninstall    remove it
+okkhor.exe --portable     run from here, never ask
+--silent                  suppress all dialogs, for scripting
 ```
 
-Installing copies the program to `%LOCALAPPDATA%\Programs\okkhor-gui`, adds a
+Installing copies the program to `%LOCALAPPDATA%\Programs\okkhor`, adds a
 Start Menu entry, registers in **Settings → Apps → Installed apps**, and turns
 on Start with Windows. There is no administrator prompt at any point: the app
 is per-user by nature, since it hooks one interactive session.
+
+Names differ by where they are read. Files and registry keys are `okkhor`,
+Apps & Features shows **অক্ষর**, and the Start Menu entry is **Okkhor** —
+ASCII there on purpose, since Start Menu search matches what you type and
+anyone who wants this app is typing on an English keyboard.
 
 Uninstall from Settings → Apps like any other application, or run
 `--uninstall`. It removes the program, the shortcut, the autostart entry and
@@ -51,7 +69,7 @@ earlier runs.
 
 ## Using it
 
-Run `okkhor-gui.exe`. There is no window — look for the tray icon.
+Run `okkhor.exe`. There is no window — look for the tray icon.
 
 **F11** toggles transliteration for the focused window. That is the only key
 the program claims; quitting is done from the tray menu.
@@ -98,10 +116,10 @@ normally.
 
 - **Elevated applications.** Windows blocks a normal-integrity hook from seeing
   keystrokes headed for an elevated window, so Task Manager and admin terminals
-  will not transliterate. Running okkhor-gui elevated fixes that, but the
+  will not transliterate. Running it elevated fixes that, but the
   autostart entry cannot launch an elevated process without a UAC prompt — use a
   Task Scheduler entry with *Run with highest privileges* instead.
-- **F11 is claimed globally.** While okkhor-gui runs, browsers do not get F11 for
+- **F11 is claimed globally.** While the app runs, browsers do not get F11 for
   fullscreen. Only one application at a time can hold a hotkey, so if the
   registration is refused the program detects the key in its keyboard hook
   instead.
@@ -175,7 +193,7 @@ since it only becomes ক্ষ when the x is read together with the k.
 Windows application is expected to register, confirms the *installed* copy
 transliterates, then uninstalls through the recorded `UninstallString` — the
 same one Settings invokes — and checks that nothing is left. It refuses to run
-if okkhor-gui is already installed, so it cannot destroy a real installation.
+if the app is already installed, so it cannot destroy a real installation.
 
 They print per-check PASS/FAIL and exit non-zero on failure. They take over the
 keyboard and the foreground window for about half a minute each, so do not type

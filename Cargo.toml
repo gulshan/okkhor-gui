@@ -5,6 +5,11 @@ edition = "2024"
 description = "Background Bangla phonetic input for Windows, powered by the okkhor crate"
 license = "MIT"
 
+# Binary output name.
+[[bin]]
+name = "okkhor"
+path = "src/main.rs"
+
 [dependencies]
 okkhor = { version = "0.10", features = ["editor"] }
 
