@@ -1,10 +1,15 @@
-# End-to-end test: an unrelated window's focus events must not drop the word.
+# End-to-end test: which focus events may drop the word being typed.
 #
 # Applications announce their internal focus moves with NotifyWinEvent, and
 # every one of those reaches an out-of-context WinEvent hook regardless of which
-# process it came from. okkhor-gui once cleared its typing buffer on all of
-# them, so a chat client or Explorer updating itself mid-word silently split the
-# word being typed.
+# process it came from. Only one kind means the caret actually moved: a child
+# control of the window being typed into taking focus. The app once cleared on
+# all of them, so a chat client or Explorer updating itself mid-word silently
+# split the word; it then cleared on the target window announcing focus on
+# itself, which broke every Chromium address bar.
+#
+# The three cases are therefore: another process's window (ignore), this
+# window's own top level (ignore), a child control of this window (clear).
 #
 # `kx` is the probe because its meaning depends on an earlier letter: the x only
 # becomes ষ when it is read together with the k. Lose the buffer between the two
@@ -85,10 +90,19 @@ try {
     Check 'kxoma survives background focus' $KKHOMA (Type-With-Noise 'kxoma' $background)
     Check 'ami survives background focus'   $AMI    (Type-With-Noise 'ami' $background)
 
-    # The other half of the contract. A focus move inside the window being typed
-    # into is real — the caret may have gone to another field — so the word must
-    # still be abandoned there. Splitting `kx` is exactly what that looks like.
-    Check 'own-window focus still resets' $SPLIT (Type-With-Noise 'kx' $typing.Form.Handle)
+    # The other half of the contract, and the distinction is the *level* the
+    # event is announced at, not the window it belongs to.
+    #
+    # A child control taking focus is a real caret move — it may be another
+    # field — so the word must be abandoned, and splitting `kx` is what that
+    # looks like.
+    Check 'child-window focus resets' $SPLIT (Type-With-Noise 'kx' $typing.Box.Handle)
+
+    # The window announcing focus on *itself* is not a caret move, and treating
+    # it as one broke every browser address bar: Chromium fires exactly this on
+    # its top-level HWND for each keystroke into the omnibox, so `ami` arrived
+    # as আমই and `kx` as কএক্স. Verified against Edge 148.
+    Check 'own top-level focus does not reset' $KKHO (Type-With-Noise 'kx' $typing.Form.Handle)
 }
 catch {
     # Foreground lost mid-run. Stop rather than type the rest into whatever took

@@ -275,6 +275,19 @@ function Start-Okkhor {
     $process = Start-Process -FilePath (Resolve-OkkhorExe) -ArgumentList '--portable' -PassThru
     # Give the hooks, hotkeys and tray icon time to install.
     Start-Sleep -Seconds 2
+
+    # A second instance quits on the spot, because run_tray_app holds a
+    # singleton mutex. Without this check the suite carries on and silently
+    # exercises whichever copy already owns that mutex — an installed build, for
+    # instance — and every result describes that binary instead of this one.
+    # This has happened twice, both times producing a run that looked fine.
+    if ($process.HasExited) {
+        'ABORT: the build under test exited immediately, so another instance'
+        'already holds the singleton mutex. This run would have measured that'
+        'copy rather than the one just built. Close or uninstall it, then retry:'
+        '    Get-Process okkhor | Format-Table Id, Path'
+        exit 2
+    }
     return $process
 }
 

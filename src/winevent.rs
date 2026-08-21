@@ -59,20 +59,34 @@ unsafe extern "system" fn win_event_proc(
             tray::refresh();
         }
         EVENT_OBJECT_FOCUS => {
-            // Only a focus move inside the window being typed into means the
-            // caret has gone somewhere unexpected.
+            // A *child* control of the window being typed into took focus, so
+            // the caret has gone somewhere we cannot predict.
             //
-            // These events are noisy and global: applications announce their
-            // internal focus changes with NotifyWinEvent, and every one of them
-            // reaches this hook regardless of which process it came from.
-            // Clearing on all of them abandoned the buffered word at random
-            // while the user was still typing it, which corrupts any spelling
-            // whose meaning depends on earlier letters — `kx` came out as
-            // কএক্স instead of ক্ষ, because the k was committed alone and the x
-            // then re-analysed as a fresh word.
+            // Two filters, each paid for by a bug.
+            //
+            // The event has to belong to the target window at all. These events
+            // are noisy and global: applications announce their internal focus
+            // changes with NotifyWinEvent, and every one reaches this hook
+            // whatever process it came from. Clearing on all of them abandoned
+            // the word at random while it was still being typed, which corrupts
+            // any spelling whose meaning depends on an earlier letter — `kx`
+            // came out as কএক্স instead of ক্ষ.
+            //
+            // And the window may not be announcing focus on *itself*. Chromium
+            // does that on its own top-level HWND for every keystroke into the
+            // address bar, which abandoned the word between letters: `ami` came
+            // out as আমই, with the `i` a standalone vowel instead of a sign on
+            // the ম. A real caret move lands on a child control, so `hwnd` is
+            // below `root` rather than equal to it, which separates the two.
+            //
+            // What this no longer catches is a purely programmatic focus move
+            // that reports the top-level window. Nothing is lost in practice:
+            // a click is caught by the mouse hook, Tab and the arrow keys are
+            // word breaks already, and switching window is caught by the
+            // foreground check in `keyboard`.
             let root = unsafe { GetAncestor(hwnd, GA_ROOT) };
             state::with_app(|app| {
-                if !app.target.is_invalid() && (root == app.target || hwnd == app.target) {
+                if !app.target.is_invalid() && root == app.target && hwnd != root {
                     app.abandon_word();
                 }
             });
