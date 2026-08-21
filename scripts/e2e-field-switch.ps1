@@ -27,6 +27,7 @@ Assert-DesktopUnlocked
 $KO      = Text-Of 0x0995                                   # ক
 $KKHO    = Text-Of 0x0995, 0x09CD, 0x09B7                   # ক্ষ
 $EKS     = Text-Of 0x098F, 0x0995, 0x09CD, 0x09B8           # এক্স
+$KO_TAB_EKS = Text-Of 0x0995, 0x0009, 0x098F, 0x0995, 0x09CD, 0x09B8   # ক<TAB>এক্স
 
 # Two fields, so a focus move stays inside one top-level window.
 function New-TwoFieldWindow {
@@ -34,7 +35,7 @@ function New-TwoFieldWindow {
     $form.Text = 'okkhor e2e - field switch'
     $form.TopMost = $true
     $form.Width = 460
-    $form.Height = 180
+    $form.Height = 280
     $form.StartPosition = 'Manual'
     $form.Location = New-Object System.Drawing.Point(80, 200)
 
@@ -46,12 +47,21 @@ function New-TwoFieldWindow {
     $b.Font = $font; $b.Width = 420
     $b.Location = New-Object System.Drawing.Point(10, 80)
 
+    # A field where Tab types a tab instead of changing focus, as a multiline
+    # editor does. Same key, opposite meaning.
+    $t = New-Object System.Windows.Forms.TextBox
+    $t.Font = $font; $t.Width = 420; $t.Height = 60
+    $t.Multiline = $true
+    $t.AcceptsTab = $true
+    $t.Location = New-Object System.Drawing.Point(10, 140)
+
     $form.Controls.Add($a)
     $form.Controls.Add($b)
+    $form.Controls.Add($t)
     $form.Show()
     Pump 300
     # `Box` is what Use-Window focuses, so the run always starts in the first field.
-    return @{ Form = $form; Box = $a; A = $a; B = $b }
+    return @{ Form = $form; Box = $a; A = $a; B = $b; Tabbed = $t }
 }
 
 function Clear-Fields {
@@ -106,6 +116,25 @@ try {
     Pump 600
     Check 'Tab to the next field resets the word' $EKS $w.B.Text
     Check 'and the first field is still untouched' $KO $w.A.Text
+
+    # The same key where it types a tab rather than changing focus. Focus never
+    # moves, so no focus event fires and the WinEvent hook cannot help: the word
+    # has to end because classify breaks on the key itself.
+    #
+    # Leaving the buffer alone here would not lose the tab, it would corrupt what
+    # follows it — `kx` would still convert as one conjunct and only its tail
+    # would be sent, giving ক<TAB>্ষ.
+    Clear-Fields $w
+    $w.Tabbed.Focus() | Out-Null
+    Pump 500
+    Tap $VK.K
+    Pump 300
+    Tap $VK.Tab
+    Pump 400
+    Tap ([int][char]'X')
+    Pump 600
+    Check 'a tab typed into the field also resets' $KO_TAB_EKS $w.Tabbed.Text
+    Check 'and focus never left that field' 'True' "$($w.Tabbed.Focused)"
 }
 catch {
     # Foreground lost mid-run. Stop rather than type the rest into whatever took
