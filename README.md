@@ -173,6 +173,7 @@ pwsh -File scripts\e2e-typing.ps1
 pwsh -File scripts\e2e-punctuation.ps1
 pwsh -File scripts\e2e-per-window.ps1
 pwsh -File scripts\e2e-focus-noise.ps1
+pwsh -File scripts\e2e-field-switch.ps1
 pwsh -File scripts\e2e-install.ps1
 ```
 
@@ -186,9 +187,12 @@ other consonant, and F11 toggling back off. `e2e-punctuation.ps1` checks the
 conversions in the table above, including the decimal-point exception and the
 backtick escape. `e2e-per-window.ps1` checks that two windows in the *same
 process* hold independent modes and that a mode survives switching away and
-back. `e2e-focus-noise.ps1` fires focus events from an unrelated background
-window mid-word and checks the buffered word survives — `kx` is the probe,
-since it only becomes ক্ষ when the x is read together with the k.
+back. `e2e-focus-noise.ps1` covers which focus events may drop the word: one
+from an unrelated background window must not, nor must the typing window
+announcing focus on itself — that one broke every browser address bar — while a
+child control of it taking focus must. `e2e-field-switch.ps1` does the same
+thing for real rather than synthesised events, moving focus between two fields
+on one form and checking the word never continues into the second.
 `e2e-install.ps1` installs from a temporary folder, checks everything a
 Windows application is expected to register, confirms the *installed* copy
 transliterates, then uninstalls through the recorded `UninstallString` — the
